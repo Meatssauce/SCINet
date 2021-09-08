@@ -112,7 +112,6 @@ class Interleave(tf.keras.layers.Layer):
         return tf.reshape(tf.stack([even, odd], axis=3), (shape[0], shape[1]*2, shape[2]))
 
     def call(self, inputs):
-        # print(inputs)
         return self.interleave(inputs)
 
 
@@ -127,8 +126,9 @@ class SciNet(tf.keras.Model):
         self.interleave = Interleave()
         self.add = tf.keras.layers.Add()
         self.flatten = tf.keras.layers.Flatten()
-        self.dense = tf.keras.layers.Dense(output_length)
+        self.dense = tf.keras.layers.Dense(output_length, kernel_regularizer=L1L2(0.0001, 0.01))
 
+        assert level == 3
         self.sciblock11 = SciBlock(kernel_size, h)
         self.sciblock21 = SciBlock(kernel_size, h)
         self.sciblock22 = SciBlock(kernel_size, h)
@@ -145,7 +145,7 @@ class SciNet(tf.keras.Model):
         #     outputs = [element for tensor in inputs for element in self.sciblocks[i](tensor)]
         #     i = len(outputs)
         #     inputs = outputs
-        # print(input_tensor)
+
         x11, x12 = self.sciblock11(input_tensor)
 
         x21, x22 = self.sciblock21(x11)
@@ -155,16 +155,13 @@ class SciNet(tf.keras.Model):
         x33, x34 = self.sciblock32(x22)
         x35, x36 = self.sciblock33(x23)
         x37, x38 = self.sciblock34(x24)
-        # print(f'x31{x31.shape}\nx32{x32.shape}\nx33{x33.shape}\nx34{x34.shape}\nx35{x35.shape}\nx36{x36.shape}\n'
-        #       f'x37{x37.shape}\nx38{x38.shape}')
-        x = self.interleave([x31, x32, x33, x34, x35, x36, x37, x38])
+
         # x = self.interleave(outputs)
+        x = self.interleave([x31, x32, x33, x34, x35, x36, x37, x38])
         x = self.add([x, input_tensor])
-        # print(x)
+
         x = self.flatten(x)
-        # print(x)
         x = self.dense(x)
-        # print(x)
         return x
 
 
@@ -193,20 +190,6 @@ look_back_window, forecast_horizon = 168, 3
 h, kernel_size, level = 1, 5, 3
 data_filepath = 'ETH-USD-2020-06-01.csv'
 
-# if os.path.isfile('__cache'):
-#     with open('__cache', 'rb') as f:
-#         X, y = load(f)
-# else:
-#     data = pd.read_csv(data_filepath)
-#     data = (data - data.mean()) / data.var()  # z-score transformation
-#     X, y = split_sequence(data.values, look_back_window, forecast_horizon)
-#     y_idx = data.columns.tolist().index('close')
-#     y = y[:, :, y_idx]
-#     del data
-#     with open('__cache', 'wb') as f:
-#         dump((X, y), f)
-# print(f'X{X.shape}\ny{y.shape}')
-
 # Load and preprocess data
 data = pd.read_csv(data_filepath)
 y_idx = data.columns.tolist().index('close')
@@ -230,7 +213,8 @@ y_test = y_test[:, :, y_idx]
 # Make model
 model = SciNet(forecast_horizon, level, h, kernel_size)
 # optimizer = optimizers.Adam(5e-3, clipvalue=0.5)
-model.compile(optimizer='adam', loss='mse')
+opt = tf.keras.optimizers.Adam(learning_rate=5e-3)
+model.compile(optimizer=opt, loss='mse')
 print(model.summary)
 # tf.keras.utils.plot_model(model, to_file='modelDiagram.png', show_shapes=True)
 
@@ -247,7 +231,7 @@ print(model.summary)
 # y_train = (y_train - y_distro.means) / np.sqrt(y_distro.variances)
 
 early_stopping = EarlyStopping(monitor='val_loss', patience=5, min_delta=0, verbose=1, restore_best_weights=True)
-history = model.fit(X_train, y_train, validation_split=0.25, batch_size=4, epochs=1, callbacks=[early_stopping])
+history = model.fit(X_train, y_train, validation_split=0.25, batch_size=4, epochs=30, callbacks=[early_stopping])
 
 # Generate new id, then save model, parser and relevant files
 existing_ids = [int(name) for name in os.listdir('saved-models/') if name.isnumeric()]
