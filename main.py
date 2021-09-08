@@ -212,8 +212,11 @@ y_idx = data.columns.tolist().index('close')
 
 train_data, test_data = train_test_split(data, test_size=0.2, shuffle=True, random_state=42)
 
-train_data = (train_data - train_data.mean()) / (train_data.var() ** (1/2))  # z-score transformation
-test_data = (test_data - train_data.mean()) / (train_data.var() ** (1/2))
+Distributions = namedtuple('Distributions', 'means variances')
+train_distr = Distributions(train_data.mean(), train_data.var())
+
+train_data = (train_data - train_distr.means) / (train_distr.variances ** (1/2))  # z-score transformation
+test_data = (test_data - train_distr.means) / (train_distr.variances ** (1/2))
 
 X_train, y_train = split_sequence(train_data.values, look_back_window, forecast_horizon,
                                   look_back_window + forecast_horizon)
@@ -242,29 +245,29 @@ print(model.summary)
 # y_distro = Distributions(y_train.mean(axis=0), y_train.var(axis=0))
 # y_train = (y_train - y_distro.means) / np.sqrt(y_distro.variances)
 
-early_stopping = EarlyStopping(monitor='val_loss', patience=10, min_delta=0, verbose=1, restore_best_weights=True)
-history = model.fit(X_train, y_train, validation_split=0.25, batch_size=4, epochs=1000, callbacks=[early_stopping])
+early_stopping = EarlyStopping(monitor='val_loss', patience=5, min_delta=0, verbose=1, restore_best_weights=True)
+history = model.fit(X_train, y_train, validation_split=0.25, batch_size=4, epochs=1, callbacks=[early_stopping])
 
 # Generate new id, then save model, parser and relevant files
 existing_ids = [int(name) for name in os.listdir('saved-models/') if name.isnumeric()]
 run_id = random.choice(list(set(range(0, 1000)) - set(existing_ids)))
-save_directory = f'saved-models/{run_id:03d}/'
+save_directory = f'saved-models/regressor/{run_id:03d}/'
 os.makedirs(os.path.dirname(save_directory), exist_ok=True)
 
-model.save(save_directory + 'SCINET_regressor.hdf5')
-# with open(save_directory + 'train_data_distributions', 'wb') as f:
-#     dump((X_distro, y_distro), f, compress=3)
+model.save(save_directory)
+with open(save_directory + 'train_distributions', 'wb') as f:
+    dump(train_distr, f, compress=3)
 pd.DataFrame(history.history).to_csv(save_directory + 'train_history.csv')
 
 # Plot accuracy
-plt.plot(history.history['mean_absolute_error'])
-plt.plot(history.history['val_mean_absolute_error'])
-plt.title('model accuracy')
-plt.ylabel('mean absolute error')
-plt.xlabel('epoch')
-plt.legend(['train', 'validation'], loc='upper right')
-plt.savefig(save_directory + 'accuracy.png')
-plt.clf()
+# plt.plot(history.history['mean_absolute_error'])
+# plt.plot(history.history['val_mean_absolute_error'])
+# plt.title('model accuracy')
+# plt.ylabel('mean absolute error')
+# plt.xlabel('epoch')
+# plt.legend(['train', 'validation'], loc='upper right')
+# plt.savefig(save_directory + 'accuracy.png')
+# plt.clf()
 
 # Plot loss
 plt.plot(history.history['loss'])
@@ -277,9 +280,9 @@ plt.savefig(save_directory + 'loss.png')
 
 # Evaluate
 # run_id = 523
-# model = load_model(f'saved-models/{run_id}/SCINET_regressor.hdf5')
-# with open(f'saved-models/{run_id}/train_data_distributions', 'rb') as f:
-#     X_distro, y_distro = load(f)
+# model = tf.saved_model.load(save_directory)
+# with open(f'saved-models/regressor/{run_id:03d}/train_distributions', 'rb') as f:
+#     train_distr = load(f)
 # X_test = preprocessor.transform(X_test)
 # X_test = X_test.reshape(-1, X_test.shape[-1])
 # X_test = (X_test - X_distro.means) / np.sqrt(X_distro.variances)
@@ -289,7 +292,21 @@ scores = model.evaluate(X_test, y_test)
 try:
     df_scores = pd.read_csv('saved-models/scores.csv')
     df_scores.loc[len(df_scores)] = [run_id] + scores + [pd.Timestamp.now(tz='Australia/Melbourne')]
-except FileNotFoundError:
+except (FileNotFoundError, TypeError):
+    if not isinstance(scores, list):
+        scores = [scores]
     row = [[run_id] + scores + [pd.Timestamp.now(tz='Australia/Melbourne')]]
     df_scores = pd.DataFrame(row, columns=['id'] + list(model.metrics_names) + ['time'])
 df_scores.to_csv('saved-models/scores.csv', index=False)
+
+# Predict
+model = load_model(f'saved-models/regressor/{run_id}/')
+# with open(f'saved-models/regressor/{run_id:03d}/train_distributions', 'rb') as f:
+#     train_distr = load(f)
+y_pred = model.predict(X_test)
+y_pred = y_pred * (train_distr.variances['close'] ** (1/2)) + train_distr.means['close']
+y_actual = y_test * (train_distr.variances['close'] ** (1/2)) + train_distr.means['close']
+df = pd.DataFrame()
+df['Pred'] = y_pred.reshape(-1)
+df['Actual'] = y_actual.reshape(-1)
+df.to_csv('comparison.csv')
