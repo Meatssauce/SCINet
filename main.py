@@ -19,9 +19,10 @@ from tensorflow.keras.metrics import RootMeanSquaredError, MeanAbsoluteError
 
 
 class InnerConv1DBlock(tf.keras.Model):
-    def __init__(self, filters, h, kernel_size, neg_slope=.01, dropout=.5):
-        super(InnerConv1DBlock, self).__init__()
-        self.conv1d = tf.keras.layers.Conv1D(h * filters, kernel_size, padding='same', dtype='float32')
+    def __init__(self, filters: int, h: int, kernel_size: int, neg_slope: float = .01, dropout: float = .5,
+                 name: str = ''):
+        super(InnerConv1DBlock, self).__init__(name=name)
+        self.conv1d = tf.keras.layers.Conv1D(h * filters, kernel_size, padding='same')
         self.leakyrelu = tf.keras.layers.LeakyReLU(neg_slope)
 
         self.dropout = tf.keras.layers.Dropout(dropout)
@@ -57,7 +58,7 @@ class Split(tf.keras.layers.Layer):
 
 
 class SciBlock(tf.keras.Model):
-    def __init__(self, kernel_size, h):
+    def __init__(self, kernel_size: int, h: int):
         super(SciBlock, self).__init__()
         self.kernel_size = kernel_size
         self.h = h
@@ -70,10 +71,10 @@ class SciBlock(tf.keras.Model):
     def build(self, input_shape):
         _, _, filters = input_shape
 
-        self.psi = InnerConv1DBlock(filters, self.h, self.kernel_size)
-        self.phi = InnerConv1DBlock(filters, self.h, self.kernel_size)
-        self.eta = InnerConv1DBlock(filters, self.h, self.kernel_size)
-        self.rho = InnerConv1DBlock(filters, self.h, self.kernel_size)
+        self.psi = InnerConv1DBlock(filters, self.h, self.kernel_size, name='psi')
+        self.phi = InnerConv1DBlock(filters, self.h, self.kernel_size, name='phi')
+        self.eta = InnerConv1DBlock(filters, self.h, self.kernel_size, name='eta')
+        self.rho = InnerConv1DBlock(filters, self.h, self.kernel_size, name='rho')
 
     def call(self, input_tensor):
         F_odd, F_even = self.split(input_tensor)
@@ -93,8 +94,8 @@ class SciBlock(tf.keras.Model):
 
 
 class Interleave(tf.keras.layers.Layer):
-    def __init__(self, **kwargs):
-        super(Interleave, self).__init__(**kwargs)
+    def __init__(self):
+        super(Interleave, self).__init__()
 
     def interleave(self, slices):
         if not slices:
@@ -116,7 +117,7 @@ class Interleave(tf.keras.layers.Layer):
 
 
 class SciNet(tf.keras.Model):
-    def __init__(self, output_length: Tuple[int, int], level: int, h: int, kernel_size: int):
+    def __init__(self, output_length: int, level: int, h: int, kernel_size: int):
         super(SciNet, self).__init__()
         self.level = level
         self.h = h
@@ -168,7 +169,7 @@ class SciNet(tf.keras.Model):
 
 
 # split a sequence into X, y samples
-def split_sequence(sequence, look_back_window, forecast_horizon, stride=1):
+def split_sequence(sequence, look_back_window: int, forecast_horizon: int, stride: int = 1):
     X, y = [], []
     for i in range(0, len(sequence), stride):
         # find the end x and y
