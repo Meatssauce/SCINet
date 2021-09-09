@@ -88,8 +88,8 @@ class ARIMAPreprocessor(TransformerMixin):
             data = data[:, diff.shape[1]:]
 
         # Scale
-        self.y_scaler.fit([data[:, self.y_idx]])
-        data = self.scaler.fit_transform(data)
+        # self.y_scaler.fit([data[:, self.y_idx]])
+        # data = self.scaler.fit_transform(data)
 
         # todo: try StandardScaler
 
@@ -114,7 +114,7 @@ class ARIMAPreprocessor(TransformerMixin):
             data = data[:, diff.shape[1]:]
 
         # Scale
-        data = self.scaler.transform(data)
+        # data = self.scaler.transform(data)
 
         # Extract X, y
         X, y = split_sequence(data, self.look_back_window, self.forecast_horizon, self.stride)

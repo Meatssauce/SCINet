@@ -193,8 +193,8 @@ print(model.summary)
 preprocessor = ARIMAPreprocessor(y_col, look_back_window, forecast_horizon, stride, degree_of_differencing)
 X_train, y_train = preprocessor.fit_transform(train_data)
 print(f'Input shape: {X_train.shape}, {y_train.shape}')
-early_stopping = EarlyStopping(monitor='val_loss', patience=5, min_delta=0, verbose=1, restore_best_weights=True)
-history = model.fit(X_train, y_train, validation_split=0.25, batch_size=batch_size, epochs=30,
+early_stopping = EarlyStopping(monitor='val_loss', patience=100, min_delta=0, verbose=1, restore_best_weights=True)
+history = model.fit(X_train, y_train, validation_split=0.25, batch_size=batch_size, epochs=100000,
                     callbacks=[early_stopping])
 
 # Generate new id, then save model, parser and relevant files
