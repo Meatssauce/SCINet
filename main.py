@@ -7,7 +7,7 @@ import tensorflow as tf
 from joblib import dump, load
 from collections import namedtuple
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
 import matplotlib.pyplot as plt
 
 from tensorflow.keras import optimizers
@@ -16,6 +16,8 @@ from tensorflow.keras.layers import LSTM, Dense, Dropout, Masking
 from tensorflow.keras.regularizers import L1L2
 from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.metrics import RootMeanSquaredError, MeanAbsoluteError
+
+from preprocessing import ARIMAPreprocessor
 
 
 class InnerConv1DBlock(tf.keras.Model):
@@ -165,73 +167,35 @@ class SciNet(tf.keras.Model):
         return x
 
 
-# split a sequence into X, y samples
-def split_sequence(sequence, look_back_window: int, forecast_horizon: int, stride: int = 1):
-    X, y = [], []
-    for i in range(0, len(sequence), stride):
-        # find the end x and y
-        end_ix = i + look_back_window
-        end_iy = end_ix + forecast_horizon
-
-        # check if there is enough elements to fill this x, y pair
-        if end_iy > len(sequence):
-            break
-
-        # gather input and output parts of the pattern
-        seq_x, seq_y = sequence[i:end_ix], sequence[end_iy - 1 if forecast_horizon == 1 else end_ix:end_iy]
-        X.append(seq_x)
-        y.append(seq_y)
-
-    return np.asarray(X), np.asarray(y)
-
-
 # Parametres
+degree_of_differencing = 1
 look_back_window, forecast_horizon = 168, 3
+batch_size = 64
+learning_rate = 5e-3
 h, kernel_size, level = 1, 5, 3
+stride = 1
 data_filepath = 'ETH-USD-2020-06-01.csv'
+y_col = 'close'
 
 # Load and preprocess data
 data = pd.read_csv(data_filepath)
-y_idx = data.columns.tolist().index('close')
 
 train_data, test_data = train_test_split(data, test_size=0.2, shuffle=True, random_state=42)
 
-Distributions = namedtuple('Distributions', 'means variances')
-train_distr = Distributions(train_data.mean(), train_data.var())
-
-train_data = (train_data - train_distr.means) / (train_distr.variances ** (1/2))  # z-score transformation
-test_data = (test_data - train_distr.means) / (train_distr.variances ** (1/2))
-
-X_train, y_train = split_sequence(train_data.values, look_back_window, forecast_horizon,
-                                  look_back_window + forecast_horizon)
-y_train = y_train[:, :, y_idx]
-
-X_test, y_test = split_sequence(test_data.values, look_back_window, forecast_horizon,
-                                look_back_window + forecast_horizon)
-y_test = y_test[:, :, y_idx]
-
 # Make model
 model = SciNet(forecast_horizon, level, h, kernel_size)
-# optimizer = optimizers.Adam(5e-3, clipvalue=0.5)
-opt = tf.keras.optimizers.Adam(learning_rate=5e-3)
+opt = tf.keras.optimizers.Adam(learning_rate=learning_rate)  # clipvalue=0.5 ?
 model.compile(optimizer=opt, loss='mse')
 print(model.summary)
 # tf.keras.utils.plot_model(model, to_file='modelDiagram.png', show_shapes=True)
 
 # Train model
-# Distributions = namedtuple('Distributions', 'means variances')
-# # preprocessor = StandardScaler()
-# # X_train = preprocessor.fit_transform(X_train)
-# X_train = X_train.reshape(-1, X_train.shape[-1])
-# X_distro = Distributions(X_train.mean(axis=0), X_train.var(axis=0))
-# X_train = (X_train - train_distro.means) / np.sqrt(train_distro.variances)
-# X_train = X_train.reshape(-1, look_back_window, X_train.shape[-1])
-#
-# y_distro = Distributions(y_train.mean(axis=0), y_train.var(axis=0))
-# y_train = (y_train - y_distro.means) / np.sqrt(y_distro.variances)
-
+preprocessor = ARIMAPreprocessor(y_col, look_back_window, forecast_horizon, stride, degree_of_differencing)
+X_train, y_train = preprocessor.fit_transform(train_data)
+print(f'Input shape: {X_train.shape}, {y_train.shape}')
 early_stopping = EarlyStopping(monitor='val_loss', patience=5, min_delta=0, verbose=1, restore_best_weights=True)
-history = model.fit(X_train, y_train, validation_split=0.25, batch_size=4, epochs=30, callbacks=[early_stopping])
+history = model.fit(X_train, y_train, validation_split=0.25, batch_size=batch_size, epochs=30,
+                    callbacks=[early_stopping])
 
 # Generate new id, then save model, parser and relevant files
 existing_ids = [int(name) for name in os.listdir('saved-models/') if name.isnumeric()]
@@ -239,9 +203,10 @@ run_id = random.choice(list(set(range(0, 1000)) - set(existing_ids)))
 save_directory = f'saved-models/regressor/{run_id:03d}/'
 os.makedirs(os.path.dirname(save_directory), exist_ok=True)
 
+# Save model, preprocessor and training history
 model.save(save_directory)
-with open(save_directory + 'train_distributions', 'wb') as f:
-    dump(train_distr, f, compress=3)
+with open(save_directory + 'preprocessor', 'wb') as f:
+    dump(preprocessor, f, compress=3)
 pd.DataFrame(history.history).to_csv(save_directory + 'train_history.csv')
 
 # Plot accuracy
@@ -264,34 +229,28 @@ plt.legend(['train', 'validation'], loc='upper right')
 plt.savefig(save_directory + 'loss.png')
 
 # Evaluate
-# run_id = 523
 # model = tf.saved_model.load(save_directory)
-# with open(f'saved-models/regressor/{run_id:03d}/train_distributions', 'rb') as f:
-#     train_distr = load(f)
-# X_test = preprocessor.transform(X_test)
-# X_test = X_test.reshape(-1, X_test.shape[-1])
-# X_test = (X_test - X_distro.means) / np.sqrt(X_distro.variances)
-# X_test = X_test.reshape(-1, look_back_window, X_test.shape[-1])
-# y_train = (y_train - y_distro.means) / np.sqrt(y_distro.variances)
+# with open(f'saved-models/regressor/111/preprocessor', 'rb') as f:
+#     preprocessor = load(f)
+X_test, y_test = preprocessor.transform(test_data)
 scores = model.evaluate(X_test, y_test)
+
+# Save evaluation results
+if not isinstance(scores, list):
+    scores = [scores]
+row = [run_id] + scores + [pd.Timestamp.now(tz='Australia/Melbourne')]
 try:
     df_scores = pd.read_csv('saved-models/scores.csv')
-    df_scores.loc[len(df_scores)] = [run_id] + scores + [pd.Timestamp.now(tz='Australia/Melbourne')]
-except (FileNotFoundError, TypeError):
-    if not isinstance(scores, list):
-        scores = [scores]
-    row = [[run_id] + scores + [pd.Timestamp.now(tz='Australia/Melbourne')]]
-    df_scores = pd.DataFrame(row, columns=['id'] + list(model.metrics_names) + ['time'])
+    df_scores.loc[len(df_scores)] = row
+except FileNotFoundError:
+    df_scores = pd.DataFrame([row], columns=['id'] + list(model.metrics_names) + ['time'])
 df_scores.to_csv('saved-models/scores.csv', index=False)
 
 # Predict
-model = load_model(f'saved-models/regressor/{run_id}/')
-# with open(f'saved-models/regressor/{run_id:03d}/train_distributions', 'rb') as f:
-#     train_distr = load(f)
+# model = load_model(f'saved-models/regressor/{run_id}/')
+# with open(f'saved-models/regressor/{run_id:03d}/preprocessor', 'rb') as f:
+#     preprocessor = load(f)
 y_pred = model.predict(X_test)
-y_pred = y_pred * (train_distr.variances['close'] ** (1/2)) + train_distr.means['close']
-y_actual = y_test * (train_distr.variances['close'] ** (1/2)) + train_distr.means['close']
-df = pd.DataFrame()
-df['Pred'] = y_pred.reshape(-1)
-df['Actual'] = y_actual.reshape(-1)
+comparison = np.vstack([y_pred.reshape(-1), y_test.reshape(-1)]).transpose()
+df = pd.DataFrame(comparison, columns=['Prediction', 'Actual'])
 df.to_csv('comparison.csv')
