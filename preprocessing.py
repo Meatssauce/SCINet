@@ -44,12 +44,16 @@ class StocksImputer(TransformerMixin):
         return data
 
 
-def difference(dataset, interval=1):
+def difference(dataset, interval=1, relative=False, min_price=1e-04):
     delta = []
     for i in range(interval, len(dataset)):
         value = dataset[i] - dataset[i - interval]
+        if relative:
+            prev_price = dataset[i - interval]
+            prev_price[prev_price == 0] = min_price
+            value /= prev_price
         delta.append(value)
-    return delta
+    return np.asarray(delta)
 
 
 class ARIMAPreprocessor(TransformerMixin):
@@ -65,6 +69,7 @@ class ARIMAPreprocessor(TransformerMixin):
         self.diff_order = diff_order
         self.interpolation_imputer = StocksImputer(method='linear')
         self.scaler = MinMaxScaler()
+        self.y_scaler = MinMaxScaler()
 
     def fit_transform(self, data, **fit_params):
         data = data.drop(columns=['time'])
@@ -75,10 +80,15 @@ class ARIMAPreprocessor(TransformerMixin):
         data = self.interpolation_imputer.fit_transform(data)
 
         # Differencing
-        for d in range(1, self.diff_order):
-            data = np.append(data, np.pad(difference(data), pad_width=((d, 0), (0, 0))))
+        diff = np.array(data)
+        for d in range(1, self.diff_order + 1):
+            diff = difference(diff, relative=True)
+            data = np.append(data, np.pad(diff, pad_width=((d, 0), (0, 0))), axis=1)
+        if self.diff_order > 0:
+            data = data[:, diff.shape[1]:]
 
         # Scale
+        self.y_scaler.fit([data[:, self.y_idx]])
         data = self.scaler.fit_transform(data)
 
         # todo: try StandardScaler
@@ -96,8 +106,12 @@ class ARIMAPreprocessor(TransformerMixin):
         data = self.interpolation_imputer.transform(data)
 
         # Differencing
-        for d in range(1, self.diff_order):
-            data = np.append(data, np.pad(difference(data), pad_width=((d, 0), (0, 0))))
+        diff = np.array(data)
+        for d in range(1, self.diff_order + 1):
+            diff = difference(diff, relative=True)
+            data = np.append(data, np.pad(diff, pad_width=((d, 0), (0, 0))), axis=1)
+        if self.diff_order > 0:
+            data = data[:, diff.shape[1]:]
 
         # Scale
         data = self.scaler.transform(data)

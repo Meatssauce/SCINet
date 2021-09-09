@@ -173,7 +173,7 @@ look_back_window, forecast_horizon = 168, 3
 batch_size = 64
 learning_rate = 5e-3
 h, kernel_size, level = 1, 5, 3
-stride = 1
+stride = look_back_window + forecast_horizon
 data_filepath = 'ETH-USD-2020-06-01.csv'
 y_col = 'close'
 
