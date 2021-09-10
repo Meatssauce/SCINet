@@ -20,9 +20,9 @@ from SCINet import SciNet
 
 # Make model
 def make_model(time_stamps, n_features):
-    input_ = tf.keras.Input(shape=(time_stamps, n_features))
-    output = SciNet(forecast_horizon, level, h, kernel_size)(input_)
-    model = tf.keras.Model(input_, output)
+    x = tf.keras.Input(shape=(time_stamps, n_features))
+    y = SciNet(forecast_horizon, level, h, kernel_size, regularizer=(0.001, 0.01))(x)
+    model = tf.keras.Model(x, y)
 
     model.summary()
     tf.keras.utils.plot_model(model, to_file='modelDiagram.png', show_shapes=True)
@@ -33,16 +33,16 @@ def make_model(time_stamps, n_features):
 
 
 # Parametres
-degree_of_differencing = 2
-look_back_window, forecast_horizon = 48, 24
+data_filepath = 'ETH-USD-2020-06-01.csv'
+# data_filepath = 'ETDataset-main/ETT-small/ETTh1.csv'
+y_col = 'close'
+index_col = 'time'
+degree_of_differencing = 0
+look_back_window, forecast_horizon = 128, 12
 batch_size = 4
 learning_rate = 9e-3
 h, kernel_size, level = 4, 5, 3
-stride = look_back_window + forecast_horizon
-# data_filepath = 'ETH-USD-2020-06-01.csv'
-data_filepath = 'ETDataset-main/ETT-small/ETTh1.csv'
-y_col = 'OT'
-index_col = 'date'
+stride = look_back_window + forecast_horizon  # unsure if any value lower than this would cause data leak
 
 
 if __name__ == '__main__':
@@ -55,7 +55,7 @@ if __name__ == '__main__':
 
     # Train model
     preprocessor = ARIMAPreprocessor(y_col, look_back_window, forecast_horizon, stride, degree_of_differencing,
-                                     relative=True, scaling='standard')
+                                     relative_diff=True, scaling='standard')
     X_train, y_train = preprocessor.fit_transform(train_data)
     X_val, y_val = preprocessor.transform(val_data)
     print(f'Input shape: X{X_train.shape}, y{y_train.shape}')
@@ -65,7 +65,7 @@ if __name__ == '__main__':
     history = model.fit(X_train, y_train, validation_data=(X_val, y_val), batch_size=batch_size, epochs=100000,
                         callbacks=[early_stopping])
 
-    # Generate new id, then save model, parser and relevant files
+    # Generate new id and create save directory
     existing_ids = [int(name) for name in os.listdir('saved-models/') if name.isnumeric()]
     run_id = random.choice(list(set(range(0, 1000)) - set(existing_ids)))
     save_directory = f'saved-models/regressor/{run_id:03d}/'
