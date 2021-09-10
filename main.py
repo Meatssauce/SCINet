@@ -34,18 +34,20 @@ def make_model(time_stamps, n_features):
 
 # Parametres
 degree_of_differencing = 2
-look_back_window, forecast_horizon = 168, 3
-batch_size = 64
-learning_rate = 5e-3
-h, kernel_size, level = 1, 5, 3
+look_back_window, forecast_horizon = 48, 24
+batch_size = 4
+learning_rate = 9e-3
+h, kernel_size, level = 4, 5, 3
 stride = look_back_window + forecast_horizon
-data_filepath = 'ETH-USD-2020-06-01.csv'
-y_col = 'close'
+# data_filepath = 'ETH-USD-2020-06-01.csv'
+data_filepath = 'ETDataset-main/ETT-small/ETTh1.csv'
+y_col = 'OT'
+index_col = 'date'
 
 
 if __name__ == '__main__':
     # Load and preprocess data
-    data = pd.read_csv(data_filepath)
+    data = pd.read_csv(data_filepath, index_col=index_col)
 
     train_data = data[:int(0.6 * len(data))]
     val_data = data[int(0.6 * len(data)):int(0.8 * len(data))]
@@ -53,7 +55,7 @@ if __name__ == '__main__':
 
     # Train model
     preprocessor = ARIMAPreprocessor(y_col, look_back_window, forecast_horizon, stride, degree_of_differencing,
-                                     relative=True)
+                                     relative=True, scaling='standard')
     X_train, y_train = preprocessor.fit_transform(train_data)
     X_val, y_val = preprocessor.transform(val_data)
     print(f'Input shape: X{X_train.shape}, y{y_train.shape}')

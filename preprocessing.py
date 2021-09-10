@@ -83,8 +83,6 @@ class ARIMAPreprocessor(TransformerMixin):
             self.y_scaler = RobustScaler()
 
     def fit_transform(self, data, **fit_params):
-        data = data.drop(columns=['time'])
-
         self.y_idx = list(data.columns).index(self.y_col)
 
         # Fill missing values via interpolation
@@ -113,8 +111,6 @@ class ARIMAPreprocessor(TransformerMixin):
         return X, y
 
     def transform(self, data):
-        data = data.drop(columns=['time'])
-
         # Fill missing values via interpolation
         data = self.interpolation_imputer.transform(data)
 
