@@ -5,9 +5,6 @@ import pandas as pd
 import numpy as np
 import tensorflow as tf
 from joblib import dump, load
-from collections import namedtuple
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler, MinMaxScaler
 import matplotlib.pyplot as plt
 
 from tensorflow.keras import optimizers
@@ -18,7 +15,7 @@ from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.metrics import RootMeanSquaredError, MeanAbsoluteError
 
 from preprocessing import ARIMAPreprocessor
-from SCINet import *
+from SCINet import SciNet
 
 
 # Make model
@@ -55,52 +52,53 @@ if __name__ == '__main__':
     test_data = data[int(0.8 * len(data)):]
 
     # Train model
-    preprocessor = ARIMAPreprocessor(y_col, look_back_window, forecast_horizon, stride, degree_of_differencing)
+    preprocessor = ARIMAPreprocessor(y_col, look_back_window, forecast_horizon, stride, degree_of_differencing,
+                                     relative=True)
     X_train, y_train = preprocessor.fit_transform(train_data)
     X_val, y_val = preprocessor.transform(val_data)
     print(f'Input shape: X{X_train.shape}, y{y_train.shape}')
 
-    # model = make_model(X_train.shape[1], X_train.shape[2])
-    # early_stopping = EarlyStopping(monitor='val_loss', patience=100, min_delta=0, verbose=1, restore_best_weights=True)
-    # history = model.fit(X_train, y_train, validation_data=(X_val, y_val), batch_size=batch_size, epochs=100000,
-    #                     callbacks=[early_stopping])
-    #
-    # # Generate new id, then save model, parser and relevant files
-    # existing_ids = [int(name) for name in os.listdir('saved-models/') if name.isnumeric()]
-    # run_id = random.choice(list(set(range(0, 1000)) - set(existing_ids)))
-    # save_directory = f'saved-models/regressor/{run_id:03d}/'
-    # os.makedirs(os.path.dirname(save_directory), exist_ok=True)
-    #
-    # # Save model, preprocessor and training history
-    # model.save(save_directory)
-    # with open(save_directory + 'preprocessor', 'wb') as f:
-    #     dump(preprocessor, f, compress=3)
-    # pd.DataFrame(history.history).to_csv(save_directory + 'train_history.csv')
-    #
-    # # Plot accuracy
-    # # plt.plot(history.history['mean_absolute_error'])
-    # # plt.plot(history.history['val_mean_absolute_error'])
-    # # plt.title('model accuracy')
-    # # plt.ylabel('mean absolute error')
-    # # plt.xlabel('epoch')
-    # # plt.legend(['train', 'validation'], loc='upper right')
-    # # plt.savefig(save_directory + 'accuracy.png')
-    # # plt.clf()
-    #
-    # # Plot loss
-    # plt.plot(history.history['loss'])
-    # plt.plot(history.history['val_loss'])
-    # plt.title('model loss')
-    # plt.ylabel('loss')
-    # plt.xlabel('epoch')
-    # plt.legend(['train', 'validation'], loc='upper right')
-    # plt.savefig(save_directory + 'loss.png')
+    model = make_model(X_train.shape[1], X_train.shape[2])
+    early_stopping = EarlyStopping(monitor='val_loss', patience=100, min_delta=0, verbose=1, restore_best_weights=True)
+    history = model.fit(X_train, y_train, validation_data=(X_val, y_val), batch_size=batch_size, epochs=100000,
+                        callbacks=[early_stopping])
+
+    # Generate new id, then save model, parser and relevant files
+    existing_ids = [int(name) for name in os.listdir('saved-models/') if name.isnumeric()]
+    run_id = random.choice(list(set(range(0, 1000)) - set(existing_ids)))
+    save_directory = f'saved-models/regressor/{run_id:03d}/'
+    os.makedirs(os.path.dirname(save_directory), exist_ok=True)
+
+    # Save model, preprocessor and training history
+    model.save(save_directory)
+    with open(save_directory + 'preprocessor', 'wb') as f:
+        dump(preprocessor, f, compress=3)
+    pd.DataFrame(history.history).to_csv(save_directory + 'train_history.csv')
+
+    # Plot accuracy
+    plt.plot(history.history['mean_absolute_error'])
+    plt.plot(history.history['val_mean_absolute_error'])
+    plt.title('model accuracy')
+    plt.ylabel('mean absolute error')
+    plt.xlabel('epoch')
+    plt.legend(['train', 'validation'], loc='upper right')
+    plt.savefig(save_directory + 'accuracy.png')
+    plt.clf()
+
+    # Plot loss
+    plt.plot(history.history['loss'])
+    plt.plot(history.history['val_loss'])
+    plt.title('model loss')
+    plt.ylabel('loss')
+    plt.xlabel('epoch')
+    plt.legend(['train', 'validation'], loc='upper right')
+    plt.savefig(save_directory + 'loss.png')
 
     # Evaluate
-    run_id = 824
-    model = load_model(f'saved-models/regressor/{run_id:03d}/')
-    with open(f'saved-models/regressor/{run_id:03d}/preprocessor', 'rb') as f:
-        preprocessor = load(f)
+    # run_id = 824
+    # model = load_model(f'saved-models/regressor/{run_id:03d}/')
+    # with open(f'saved-models/regressor/{run_id:03d}/preprocessor', 'rb') as f:
+    #     preprocessor = load(f)
     X_test, y_test = preprocessor.transform(test_data)
     scores = model.evaluate(X_test, y_test)
 
@@ -120,5 +118,5 @@ if __name__ == '__main__':
     y_pred = preprocessor.y_scaler.inverse_transform(y_pred.reshape(-1, 1))
     y_test = preprocessor.y_scaler.inverse_transform(y_test.reshape(-1, 1))
     comparison = np.hstack([y_pred, y_test])
-    df = pd.DataFrame(comparison, columns=['Pct_Delta_Predicted', 'Pct_Delta_Actual'])
+    df = pd.DataFrame(comparison, columns=['Predicted', 'Actual'])
     df.to_csv(f'saved-models/regressor/{run_id:03d}/comparison.csv')

@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 from sklearn.base import TransformerMixin
 from sklearn.impute import SimpleImputer
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import MinMaxScaler, RobustScaler, StandardScaler
 
 
 def split_sequence(sequence, look_back_window: int, forecast_horizon: int, stride: int = 1):
@@ -58,7 +58,7 @@ def difference(dataset, interval=1, relative=False, min_price=1e-04):
 
 class ARIMAPreprocessor(TransformerMixin):
     def __init__(self, y_col: str, look_back_window: int, forecast_horizon: int, stride: int, diff_order: int,
-                 splitXy: bool = True):
+                 relative: bool = True, splitXy: bool = True, scaling: str = 'minmax'):
         super().__init__()
         assert look_back_window > 0 and forecast_horizon > 0 and stride > 0
 
@@ -68,10 +68,19 @@ class ARIMAPreprocessor(TransformerMixin):
         self.forecast_horizon = forecast_horizon
         self.stride = stride
         self.diff_order = diff_order
+        self.relative = relative
         self.splitXy = splitXy
         self.interpolation_imputer = StocksImputer(method='linear')
-        self.scaler = MinMaxScaler()
-        self.y_scaler = MinMaxScaler()
+
+        if scaling == 'minmax':
+            self.scaler = MinMaxScaler()
+            self.y_scaler = MinMaxScaler()
+        elif scaling == 'standard':
+            self.scaler = StandardScaler()
+            self.y_scaler = StandardScaler()
+        elif scaling == 'robust':
+            self.scaler = RobustScaler()
+            self.y_scaler = RobustScaler()
 
     def fit_transform(self, data, **fit_params):
         data = data.drop(columns=['time'])
@@ -84,7 +93,7 @@ class ARIMAPreprocessor(TransformerMixin):
         # Differencing
         diff = np.array(data)
         for d in range(1, self.diff_order + 1):
-            diff = difference(diff, relative=True)
+            diff = difference(diff, relative=self.relative)
             data = np.append(data, np.pad(diff, pad_width=((d, 0), (0, 0))), axis=1)
         if self.diff_order > 0:
             data = data[:, diff.shape[1]:]
@@ -93,8 +102,6 @@ class ARIMAPreprocessor(TransformerMixin):
         # if self.diff_order < 1:
         self.y_scaler.fit(data[:, self.y_idx].reshape(-1, 1))
         data = self.scaler.fit_transform(data)
-
-        # todo: try StandardScaler
 
         if not self.splitXy:
             return data
@@ -114,7 +121,7 @@ class ARIMAPreprocessor(TransformerMixin):
         # Differencing
         diff = np.array(data)
         for d in range(1, self.diff_order + 1):
-            diff = difference(diff, relative=True)
+            diff = difference(diff, relative=self.relative)
             data = np.append(data, np.pad(diff, pad_width=((d, 0), (0, 0))), axis=1)
         if self.diff_order > 0:
             data = data[:, diff.shape[1]:]
