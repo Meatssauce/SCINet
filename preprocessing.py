@@ -58,7 +58,7 @@ def difference(dataset, interval=1, relative=False, min_price=1e-04):
 
 class ARIMAPreprocessor(TransformerMixin):
     def __init__(self, y_col: str, look_back_window: int, forecast_horizon: int, stride: int, diff_order: int,
-                 relative: bool = True, splitXy: bool = True, scaling: str = 'minmax'):
+                 relative_diff: bool = True, splitXy: bool = True, scaling: str = 'minmax'):
         super().__init__()
         assert look_back_window > 0 and forecast_horizon > 0 and stride > 0
 
@@ -68,7 +68,7 @@ class ARIMAPreprocessor(TransformerMixin):
         self.forecast_horizon = forecast_horizon
         self.stride = stride
         self.diff_order = diff_order
-        self.relative = relative
+        self.relative_diff = relative_diff
         self.splitXy = splitXy
         self.interpolation_imputer = StocksImputer(method='linear')
 
@@ -91,14 +91,14 @@ class ARIMAPreprocessor(TransformerMixin):
         # Differencing
         diff = np.array(data)
         for d in range(1, self.diff_order + 1):
-            diff = difference(diff, relative=self.relative)
+            diff = difference(diff, relative=self.relative_diff)
             data = np.append(data, np.pad(diff, pad_width=((d, 0), (0, 0))), axis=1)
         if self.diff_order > 0:
             data = data[:, diff.shape[1]:]
 
         # Scale
         # if self.diff_order < 1:
-        self.y_scaler.fit(data[:, self.y_idx].reshape(-1, 1))
+        self.y_scaler.fit(data[:, self.y_idx].reshape(-1, 1))  # for reversing scaling post prediction
         data = self.scaler.fit_transform(data)
 
         if not self.splitXy:
@@ -117,7 +117,7 @@ class ARIMAPreprocessor(TransformerMixin):
         # Differencing
         diff = np.array(data)
         for d in range(1, self.diff_order + 1):
-            diff = difference(diff, relative=self.relative)
+            diff = difference(diff, relative=self.relative_diff)
             data = np.append(data, np.pad(diff, pad_width=((d, 0), (0, 0))), axis=1)
         if self.diff_order > 0:
             data = data[:, diff.shape[1]:]
