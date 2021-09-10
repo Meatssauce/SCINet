@@ -104,7 +104,8 @@ class Interleave(tf.keras.layers.Layer):
 
 
 class SciNet(tf.keras.layers.Layer):
-    def __init__(self, output_length: int, level: int, h: int, kernel_size: int):
+    def __init__(self, output_length: int, level: int, h: int, kernel_size: int,
+                 regularizer: Tuple[float, float] = (0, 0)):
         super(SciNet, self).__init__()
         self.level = level
         self.h = h
@@ -116,6 +117,7 @@ class SciNet(tf.keras.layers.Layer):
         self.flatten = tf.keras.layers.Flatten()
         # self.dense1 = tf.keras.layers.Dense(100, kernel_regularizer=L1L2(0.001, 0.01))
         self.dense = tf.keras.layers.Dense(output_length, kernel_regularizer=L1L2(0.001, 0.01))
+        self.regularizer = tf.keras.layers.ActivityRegularization(l1=regularizer[0], l2=regularizer[1])
 
     def build(self, input_shape):
         assert input_shape[1] / 2 ** 1 % 1 == 0  # inputs must be evenly divided at the lowest level of the tree
@@ -136,4 +138,6 @@ class SciNet(tf.keras.layers.Layer):
         x = self.flatten(x)
         # x = self.dense1(x)
         x = self.dense(x)
+
+        # x = self.regularizer(x)
         return x
