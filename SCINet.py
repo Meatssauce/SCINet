@@ -1,6 +1,7 @@
 from typing import Tuple
 import os
 import random
+import math
 import pandas as pd
 import numpy as np
 import tensorflow as tf
@@ -102,7 +103,7 @@ class Interleave(tf.keras.layers.Layer):
         return self.interleave(inputs)
 
 
-class SciNet(tf.keras.Model):
+class SciNet(tf.keras.layers.Layer):
     def __init__(self, output_length: int, level: int, h: int, kernel_size: int):
         super(SciNet, self).__init__()
         self.level = level
@@ -110,44 +111,29 @@ class SciNet(tf.keras.Model):
         self.kernel_size = kernel_size
         self.max_nodes = 2 ** (level + 1) - 1
 
-        # self.sciblocks = [SciBlock(kernel_size, h) for _ in range(self.max_nodes)]
+        self.sciblocks = [SciBlock(kernel_size, h) for _ in range(self.max_nodes)]
         self.interleave = Interleave()
         self.flatten = tf.keras.layers.Flatten()
+        # self.dense1 = tf.keras.layers.Dense(100, kernel_regularizer=L1L2(0.001, 0.01))
         self.dense = tf.keras.layers.Dense(output_length, kernel_regularizer=L1L2(0.001, 0.01))
 
-        assert level == 3
-        self.sciblock11 = SciBlock(kernel_size, h)
-        self.sciblock21 = SciBlock(kernel_size, h)
-        self.sciblock22 = SciBlock(kernel_size, h)
-        self.sciblock31 = SciBlock(kernel_size, h)
-        self.sciblock32 = SciBlock(kernel_size, h)
-        self.sciblock33 = SciBlock(kernel_size, h)
-        self.sciblock34 = SciBlock(kernel_size, h)
+    def build(self, input_shape):
+        assert input_shape[1] / 2 ** 1 % 1 == 0  # inputs must be evenly divided at the lowest level of the tree
+        [layer.build(input_shape) for layer in self.sciblocks]
 
     def call(self, input_tensor):
         # cascade input down a binary tree of sci-blocks
-        # inputs = [input_tensor]
-        # for i in range(self.level):
-        #     print('----')
-        #     i_end = 2 ** (i + 1) - 1
-        #     i_start = i_end - 2 ** i
-        #     outputs = [out for tensor, j in zip(inputs, range(i_start, i_end)) for out in self.sciblocks[j](tensor)]
-        #     inputs = outputs
+        inputs = [input_tensor]
+        for i in range(self.level):
+            i_end = 2 ** (i + 1) - 1
+            i_start = i_end - 2 ** i
+            outputs = [out for j, tensor in zip(range(i_start, i_end), inputs) for out in self.sciblocks[j](tensor)]
+            inputs = outputs
 
-        x11, x12 = self.sciblock11(input_tensor)
-
-        x21, x22 = self.sciblock21(x11)
-        x23, x24 = self.sciblock22(x12)
-
-        x31, x32 = self.sciblock31(x21)
-        x33, x34 = self.sciblock32(x22)
-        x35, x36 = self.sciblock33(x23)
-        x37, x38 = self.sciblock34(x24)
-
-        # x = self.interleave(outputs)
-        x = self.interleave([x31, x32, x33, x34, x35, x36, x37, x38])
+        x = self.interleave(outputs)
         x += input_tensor
 
         x = self.flatten(x)
+        # x = self.dense1(x)
         x = self.dense(x)
         return x
