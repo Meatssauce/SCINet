@@ -57,7 +57,8 @@ def difference(dataset, interval=1, relative=False, min_price=1e-04):
 
 
 class ARIMAPreprocessor(TransformerMixin):
-    def __init__(self, y_col: str, look_back_window: int, forecast_horizon: int, stride: int, diff_order: int):
+    def __init__(self, y_col: str, look_back_window: int, forecast_horizon: int, stride: int, diff_order: int,
+                 splitXy: bool = True):
         super().__init__()
         assert look_back_window > 0 and forecast_horizon > 0 and stride > 0
 
@@ -67,6 +68,7 @@ class ARIMAPreprocessor(TransformerMixin):
         self.forecast_horizon = forecast_horizon
         self.stride = stride
         self.diff_order = diff_order
+        self.splitXy = splitXy
         self.interpolation_imputer = StocksImputer(method='linear')
         self.scaler = MinMaxScaler()
         self.y_scaler = MinMaxScaler()
@@ -88,10 +90,14 @@ class ARIMAPreprocessor(TransformerMixin):
             data = data[:, diff.shape[1]:]
 
         # Scale
-        # self.y_scaler.fit([data[:, self.y_idx]])
-        # data = self.scaler.fit_transform(data)
+        # if self.diff_order < 1:
+        self.y_scaler.fit(data[:, self.y_idx].reshape(-1, 1))
+        data = self.scaler.fit_transform(data)
 
         # todo: try StandardScaler
+
+        if not self.splitXy:
+            return data
 
         # Extract X, y from time series
         X, y = split_sequence(data, self.look_back_window, self.forecast_horizon, self.stride)
@@ -114,7 +120,11 @@ class ARIMAPreprocessor(TransformerMixin):
             data = data[:, diff.shape[1]:]
 
         # Scale
-        # data = self.scaler.transform(data)
+        # if self.diff_order < 1:
+        data = self.scaler.transform(data)
+
+        if not self.splitXy:
+            return data
 
         # Extract X, y
         X, y = split_sequence(data, self.look_back_window, self.forecast_horizon, self.stride)
