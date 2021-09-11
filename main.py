@@ -21,7 +21,7 @@ from SCINet import SciNet
 # Make model
 def make_model(time_stamps, n_features):
     x = tf.keras.Input(shape=(time_stamps, n_features))
-    y = SciNet(forecast_horizon, level, h, kernel_size, regularizer=(0.001, 0.01))(x)
+    y = SciNet(forecast_horizon, levels=level, h=h, kernel_size=kernel_size, regularizer=(0.001, 0.01))(x)
     model = tf.keras.Model(x, y)
 
     model.summary()

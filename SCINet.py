@@ -57,12 +57,14 @@ class Split(tf.keras.layers.Layer):
 class SciBlock(tf.keras.layers.Layer):
     def __init__(self, output_length: int, kernel_size: int, h: int, name: str = 'sci_block', **kwargs):
         super(SciBlock, self).__init__(name=name, **kwargs)
-        self.conv1ds = {k: InnerConv1DBlock(output_length, h, kernel_size, name=k)  # regularize?
-                        for k in ['psi', 'phi', 'eta', 'rho']}
+        self.h = h
+        self.kernel_size = kernel_size
         self.split = Split()
         self.exp = Exp()
 
     def build(self, input_shape):
+        self.conv1ds = {k: InnerConv1DBlock(input_shape[2], self.h, self.kernel_size, name=k)  # regularize?
+                        for k in ['psi', 'phi', 'eta', 'rho']}
         [layer.build(input_shape) for layer in self.conv1ds.values()]  # not needed?
 
     def call(self, inputs):
@@ -112,14 +114,14 @@ class SciNet(tf.keras.layers.Layer):
         self.sciblocks = [SciBlock(output_length, kernel_size, h) for _ in range(2 ** (levels + 1) - 1)]
 
     def build(self, input_shape):
-        if input_shape[1] / 2 ** self.levels % 1 == 0:
-            raise ValueError('Malformed input shape. Input must be divisible by all nodes in the tree.')
+        if input_shape[1] / 2 ** self.levels % 1 != 0:
+            raise ValueError(f'timestamps {input_shape[1]} is not divisible by a tree with {self.levels} levels')
         [layer.build(input_shape) for layer in self.sciblocks]
 
     def call(self, inputs):
         # cascade input down a binary tree of sci-blocks
         lvl_inputs = [inputs]
-        for i in range(self.level):
+        for i in range(self.levels):
             i_end = 2 ** (i + 1) - 1
             i_start = i_end - 2 ** i
             lvl_outputs = [out for j, tensor in zip(range(i_start, i_end), lvl_inputs)
