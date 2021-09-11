@@ -100,14 +100,16 @@ class Interleave(tf.keras.layers.Layer):
 
 class SciNet(tf.keras.layers.Layer):
     def __init__(self, output_length: int, levels: int, h: int, kernel_size: int,
-                 regularizer: Tuple[float, float] = (0, 0), **kwargs):
-        super(SciNet, self).__init__(**kwargs)
+                 regularizer: Tuple[float, float] = (0, 0), name: str = '', **kwargs):
+        super(SciNet, self).__init__(name=name, **kwargs)
         self.levels = levels
-        self.sciblocks = [SciBlock(kernel_size, h) for _ in range(2 ** (levels + 1) - 1)]  # tree of sciblocks
         self.interleave = Interleave()
         self.flatten = tf.keras.layers.Flatten()
         self.dense = tf.keras.layers.Dense(output_length, kernel_regularizer=L1L2(0.001, 0.01))
         # self.regularizer = tf.keras.layers.ActivityRegularization(l1=regularizer[0], l2=regularizer[1])
+
+        # tree of sciblocks
+        self.sciblocks = [SciBlock(output_length, kernel_size, h) for _ in range(2 ** (levels + 1) - 1)]
 
     def build(self, input_shape):
         if input_shape[1] / 2 ** self.levels % 1 == 0:
@@ -136,8 +138,8 @@ class SciNet(tf.keras.layers.Layer):
 
 # class StackedSciNet(tf.keras.layers.Layer):
 #     def __init__(self, stacks: int, output_length: int, level: int, h: int, kernel_size: int,
-#                  regularizer: Tuple[float, float] = (0, 0), **kwargs):
-#         super(StackedSciNet, self).__init__(**kwargs)
+#                  regularizer: Tuple[float, float] = (0, 0), name: str = '' **kwargs):
+#         super(StackedSciNet, self).__init__(name=name, **kwargs)
 #         assert stacks > 0
 #         self.sci_nets = [SciNet(output_length, level, h, kernel_size, regularizer) for _ in range(stacks)]
 #
