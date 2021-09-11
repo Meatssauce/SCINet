@@ -33,10 +33,12 @@ def make_model(time_stamps, n_features):
 
 
 # Parametres
-data_filepath = 'ETH-USD-2020-06-01.csv'
-# data_filepath = 'ETDataset-main/ETT-small/ETTh1.csv'
-y_col = 'close'
-index_col = 'time'
+# data_filepath = 'ETH-USD-2020-06-01.csv'
+# y_col = 'close'
+# index_col = 'time'
+data_filepath = 'ETDataset-main/ETT-small/ETTh1.csv'
+y_col = 'OT'
+index_col = 'date'
 degree_of_differencing = 0
 look_back_window, forecast_horizon = 128, 12
 batch_size = 4

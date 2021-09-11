@@ -33,5 +33,8 @@ for coin_pair, granularity, start_date in parametres:
         data.append(new_data)
     except:
         continue
+from joblib import dump
+with open('price_data', 'wb') as f:
+    dump(data, f)
 data = pd.concat(data, axis=1)
 data.to_csv('Crypto-USD-2019-09-01-00-00.csv')
