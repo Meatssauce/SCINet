@@ -59,19 +59,19 @@ class SciBlock(tf.keras.layers.Layer):
         super(SciBlock, self).__init__(name=name, **kwargs)
         self.h = h
         self.kernel_size = kernel_size
-        self.split = Split()
-        self.exp = Exp()
+        # self.split = Split()
+        # self.exp = Exp()
 
     def build(self, input_shape):
         self.conv1ds = {k: InnerConv1DBlock(input_shape[2], self.h, self.kernel_size, name=k)  # regularize?
                         for k in ['psi', 'phi', 'eta', 'rho']}
-        [layer.build(input_shape) for layer in self.conv1ds.values()]  # not needed?
+        # [layer.build(input_shape) for layer in self.conv1ds.values()]  # not needed?
 
     def call(self, inputs):
-        F_odd, F_even = self.split(inputs)
+        F_odd, F_even = inputs[:, ::2], inputs[:, 1::2]
 
-        F_s_odd = F_odd * self.exp(self.conv1ds['phi'](F_even))
-        F_s_even = F_even * self.exp(self.conv1ds['psi'](F_s_odd))
+        F_s_odd = F_odd * tf.math.exp(self.conv1ds['phi'](F_even))
+        F_s_even = F_even * tf.math.exp(self.conv1ds['psi'](F_s_odd))
 
         F_prime_odd = F_s_odd + self.conv1ds['rho'](F_s_even)
         F_prime_even = F_s_even - self.conv1ds['eta'](F_s_odd)
