@@ -14,10 +14,9 @@ from tensorflow.keras.regularizers import L1L2
 
 
 class InnerConv1DBlock(tf.keras.layers.Layer):
-    def __init__(self, filters: int, h: float, kernel_size: int, neg_slope: float = .01, dropout: float = .5,
-                 name: str = '', **kwargs):
+    def __init__(self, filters: int, h: float, kernel_size: int, neg_slope: float = .01, dropout: float = .5, **kwargs):
         assert filters > 0 and h > 0
-        super(InnerConv1DBlock, self).__init__(name=name, **kwargs)
+        super(InnerConv1DBlock, self).__init__(**kwargs)
         self.conv1d = tf.keras.layers.Conv1D(max(round(h * filters), 1), kernel_size, padding='same')
         self.leakyrelu = tf.keras.layers.LeakyReLU(neg_slope)
 
@@ -55,17 +54,15 @@ class Split(tf.keras.layers.Layer):
 
 
 class SciBlock(tf.keras.layers.Layer):
-    def __init__(self, output_length: int, kernel_size: int, h: int, name: str = 'sci_block', **kwargs):
-        super(SciBlock, self).__init__(name=name, **kwargs)
+    def __init__(self, output_length: int, kernel_size: int, h: int, **kwargs):
+        super(SciBlock, self).__init__(**kwargs)
         self.h = h
         self.kernel_size = kernel_size
-        # self.split = Split()
-        # self.exp = Exp()
 
     def build(self, input_shape):
         self.conv1ds = {k: InnerConv1DBlock(input_shape[2], self.h, self.kernel_size, name=k)  # regularize?
                         for k in ['psi', 'phi', 'eta', 'rho']}
-        # [layer.build(input_shape) for layer in self.conv1ds.values()]  # not needed?
+        # [layer.build(input_shape) for layer in self.conv1ds.values()]  # unneeded?
 
     def call(self, inputs):
         F_odd, F_even = inputs[:, ::2], inputs[:, 1::2]
@@ -102,8 +99,8 @@ class Interleave(tf.keras.layers.Layer):
 
 class SciNet(tf.keras.layers.Layer):
     def __init__(self, output_length: int, levels: int, h: int, kernel_size: int,
-                 regularizer: Tuple[float, float] = (0, 0), name: str = '', **kwargs):
-        super(SciNet, self).__init__(name=name, **kwargs)
+                 regularizer: Tuple[float, float] = (0, 0), **kwargs):
+        super(SciNet, self).__init__(**kwargs)
         self.levels = levels
         self.interleave = Interleave()
         self.flatten = tf.keras.layers.Flatten()
@@ -140,8 +137,8 @@ class SciNet(tf.keras.layers.Layer):
 
 # class StackedSciNet(tf.keras.layers.Layer):
 #     def __init__(self, stacks: int, output_length: int, level: int, h: int, kernel_size: int,
-#                  regularizer: Tuple[float, float] = (0, 0), name: str = '' **kwargs):
-#         super(StackedSciNet, self).__init__(name=name, **kwargs)
+#                  regularizer: Tuple[float, float] = (0, 0), **kwargs):
+#         super(StackedSciNet, self).__init__(**kwargs)
 #         assert stacks > 0
 #         self.sci_nets = [SciNet(output_length, level, h, kernel_size, regularizer) for _ in range(stacks)]
 #
