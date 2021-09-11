@@ -125,29 +125,32 @@ class SciNet(tf.keras.layers.Layer):
         return x
 
 
-# class StackedSciNet(tf.keras.layers.Layer):
-#     def __init__(self, stacks: int, output_length: int, level: int, h: int, kernel_size: int,
-#                  regularizer: Tuple[float, float] = (0, 0), **kwargs):
-#         super(StackedSciNet, self).__init__(**kwargs)
-#         assert stacks > 0
-#         self.sci_nets = [SciNet(output_length, level, h, kernel_size, regularizer) for _ in range(stacks)]
-#
-#     def build(self, input_shape):
-#         [stack.build(input_shape) for stack in self.stacks]
-#
-#     def call(self, inputs):
-#         stack_outputs = []
-#         for sci_net in self.sci_nets:
-#             x = sci_net(x)
-#             stack_outputs.append(x)
-#
-#         # calculate loss as sum of mean of norms of differences between output and input feature vectors for each stack
-#         stack_outputs = tf.stack(stack_outputs)
-#         loss = tf.linalg.normalize(stack_outputs - inputs, 2)[1]
-#         loss = tf.reshape(loss, (-1, self.output_length))
-#         loss = tf.reduce_sum(loss, 1)
-#         loss = loss / self.output_length
-#         loss = tf.reduce_sum(loss)
-#         self.add_loss(loss)
-#
-#         return x
+class StackedSciNet(tf.keras.layers.Layer):
+    def __init__(self, output_length: int, stacks: int, levels: int, h: int, kernel_size: int,
+                 regularizer: Tuple[float, float] = (0, 0), **kwargs):
+        if stacks < 1:
+            raise ValueError('Must have at least 1 stack')
+        super(StackedSciNet, self).__init__(**kwargs)
+        self.scinets = [SciNet(output_length, levels, h, kernel_size, regularizer) for _ in range(stacks)]
+
+    def build(self, input_shape):
+        [stack.build(input_shape) for stack in self.scinets]
+
+    def call(self, inputs):
+        x = inputs
+        outputs = []
+        for scinet in self.scinets:
+            x = scinet(x)
+            outputs.append(x)  # keep each stack's output for intermediate supervision
+
+        # calculate loss as sum of mean of norms of differences between output and input feature vectors for each stack
+        outputs = tf.stack(outputs)
+        temp = outputs - inputs
+        loss = tf.linalg.normalize(temp, 2)[1]
+        loss = tf.reshape(loss, (-1, self.output_length))
+        loss = tf.reduce_sum(loss, 1)
+        loss = loss / self.output_length
+        loss = tf.reduce_sum(loss)
+        self.add_loss(loss)
+
+        return x

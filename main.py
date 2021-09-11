@@ -11,7 +11,7 @@ from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.metrics import RootMeanSquaredError, MeanAbsoluteError
 
 from preprocessing import ARIMAPreprocessor
-from SCINet import SciNet
+from SCINet import SciNet, StackedSciNet
 
 
 # Make model
@@ -19,6 +19,9 @@ def make_model(time_stamps, n_features):
     x = tf.keras.Input(shape=(time_stamps, n_features))
     y = SciNet(forecast_horizon, levels=level, h=h, kernel_size=kernel_size, regularizer=(0.001, 0.01))(x)
     model = tf.keras.Model(x, y)
+    # model = StackedSciNet(forecast_horizon, stacks=stacks, levels=level, h=h, kernel_size=kernel_size,
+    #                   regularizer=(0.001, 0.01))
+    # model = model(x)
 
     model.summary()
     tf.keras.utils.plot_model(model, to_file='modelDiagram.png', show_shapes=True)
@@ -39,7 +42,7 @@ degree_of_differencing = 0
 look_back_window, forecast_horizon = 128, 12
 batch_size = 4
 learning_rate = 9e-3
-h, kernel_size, level = 4, 5, 3
+h, kernel_size, level, stacks = 4, 5, 3, 1
 stride = look_back_window + forecast_horizon  # unsure if any value lower than this would cause data leak
 
 
