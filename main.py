@@ -3,14 +3,10 @@ import os
 import random
 import pandas as pd
 import numpy as np
-import tensorflow as tf
 from joblib import dump, load
 import matplotlib.pyplot as plt
-
-from tensorflow.keras import optimizers
+import tensorflow as tf
 from tensorflow.keras.models import Sequential, load_model
-from tensorflow.keras.layers import LSTM, Dense, Dropout, Masking
-from tensorflow.keras.regularizers import L1L2
 from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.metrics import RootMeanSquaredError, MeanAbsoluteError
 

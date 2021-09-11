@@ -1,15 +1,5 @@
 from typing import Tuple
-import os
-import random
-import math
-import pandas as pd
-import numpy as np
 import tensorflow as tf
-from joblib import dump, load
-from collections import namedtuple
-from sklearn.preprocessing import StandardScaler, MinMaxScaler
-
-from tensorflow.keras.layers import LSTM, Dense, Dropout, Masking
 from tensorflow.keras.regularizers import L1L2
 
 
@@ -37,20 +27,20 @@ class InnerConv1DBlock(tf.keras.layers.Layer):
         return x
 
 
-class Exp(tf.keras.layers.Layer):
-    def __init__(self, **kwargs):
-        super(Exp, self).__init__(**kwargs)
-
-    def call(self, inputs):
-        return tf.math.exp(inputs)
-
-
-class Split(tf.keras.layers.Layer):
-    def __init__(self, **kwargs):
-        super(Split, self).__init__(**kwargs)
-
-    def call(self, inputs):
-        return inputs[:, ::2], inputs[:, 1::2]
+# class Exp(tf.keras.layers.Layer):
+#     def __init__(self, **kwargs):
+#         super(Exp, self).__init__(**kwargs)
+#
+#     def call(self, inputs):
+#         return tf.math.exp(inputs)
+#
+#
+# class Split(tf.keras.layers.Layer):
+#     def __init__(self, **kwargs):
+#         super(Split, self).__init__(**kwargs)
+#
+#     def call(self, inputs):
+#         return inputs[:, ::2], inputs[:, 1::2]
 
 
 class SciBlock(tf.keras.layers.Layer):
