@@ -14,10 +14,11 @@ from tensorflow.keras.regularizers import L1L2
 
 
 class InnerConv1DBlock(tf.keras.layers.Layer):
-    def __init__(self, filters: int, h: int, kernel_size: int, neg_slope: float = .01, dropout: float = .5,
-                 name: str = ''):
-        super(InnerConv1DBlock, self).__init__(name=name)
-        self.conv1d = tf.keras.layers.Conv1D(h * filters, kernel_size, padding='same')
+    def __init__(self, filters: int, h: float, kernel_size: int, neg_slope: float = .01, dropout: float = .5,
+                 name: str = '', **kwargs):
+        assert filters > 0 and h > 0
+        super(InnerConv1DBlock, self).__init__(name=name, **kwargs)
+        self.conv1d = tf.keras.layers.Conv1D(max(round(h * filters), 1), kernel_size, padding='same')
         self.leakyrelu = tf.keras.layers.LeakyReLU(neg_slope)
 
         self.dropout = tf.keras.layers.Dropout(dropout)
@@ -25,11 +26,12 @@ class InnerConv1DBlock(tf.keras.layers.Layer):
         self.conv1d2 = tf.keras.layers.Conv1D(filters, kernel_size, padding='same')
         self.tanh = tf.keras.activations.tanh
 
-    def call(self, input_tensor):
+    def call(self, input_tensor, training=None):
         x = self.conv1d(input_tensor)
         x = self.leakyrelu(x)
 
-        x = self.dropout(x)
+        if training:
+            x = self.dropout(x)
 
         x = self.conv1d2(x)
         x = self.tanh(x)
@@ -53,37 +55,31 @@ class Split(tf.keras.layers.Layer):
 
 
 class SciBlock(tf.keras.layers.Layer):
-    def __init__(self, kernel_size: int, h: int):
-        super(SciBlock, self).__init__()
-        self.kernel_size = kernel_size
-        self.h = h
-
+    def __init__(self, output_length: int, kernel_size: int, h: int, name: str = 'sci_block', **kwargs):
+        super(SciBlock, self).__init__(name=name, **kwargs)
+        self.conv1ds = {k: InnerConv1DBlock(output_length, h, kernel_size, name=k)  # regularize?
+                        for k in ['psi', 'phi', 'eta', 'rho']}
         self.split = Split()
         self.exp = Exp()
 
     def build(self, input_shape):
-        _, _, filters = input_shape
+        [layer.build(input_shape) for layer in self.conv1ds.values()]  # not needed?
 
-        self.psi = InnerConv1DBlock(filters, self.h, self.kernel_size, name='psi')
-        self.phi = InnerConv1DBlock(filters, self.h, self.kernel_size, name='phi')
-        self.eta = InnerConv1DBlock(filters, self.h, self.kernel_size, name='eta')
-        self.rho = InnerConv1DBlock(filters, self.h, self.kernel_size, name='rho')
+    def call(self, inputs):
+        F_odd, F_even = self.split(inputs)
 
-    def call(self, input_tensor):
-        F_odd, F_even = self.split(input_tensor)
+        F_s_odd = F_odd * self.exp(self.conv1ds['phi'](F_even))
+        F_s_even = F_even * self.exp(self.conv1ds['psi'](F_s_odd))
 
-        F_s_odd = F_odd * self.exp(self.phi(F_even))
-        F_s_even = F_even * self.exp(self.psi(F_s_odd))
-
-        F_prime_odd = F_s_odd + self.rho(F_s_even)
-        F_prime_even = F_s_even - self.eta(F_s_odd)
+        F_prime_odd = F_s_odd + self.conv1ds['rho'](F_s_even)
+        F_prime_even = F_s_even - self.conv1ds['eta'](F_s_odd)
 
         return F_prime_odd, F_prime_even
 
 
 class Interleave(tf.keras.layers.Layer):
-    def __init__(self):
-        super(Interleave, self).__init__()
+    def __init__(self, **kwargs):
+        super(Interleave, self).__init__(**kwargs)
 
     def interleave(self, slices):
         if not slices:
@@ -92,7 +88,6 @@ class Interleave(tf.keras.layers.Layer):
             return slices[0]
 
         mid = len(slices) // 2
-
         even = self.interleave(slices[:mid])
         odd = self.interleave(slices[mid:])
 
@@ -104,40 +99,64 @@ class Interleave(tf.keras.layers.Layer):
 
 
 class SciNet(tf.keras.layers.Layer):
-    def __init__(self, output_length: int, level: int, h: int, kernel_size: int,
-                 regularizer: Tuple[float, float] = (0, 0)):
-        super(SciNet, self).__init__()
-        self.level = level
-        self.h = h
-        self.kernel_size = kernel_size
-        self.max_nodes = 2 ** (level + 1) - 1
-
-        self.sciblocks = [SciBlock(kernel_size, h) for _ in range(self.max_nodes)]
+    def __init__(self, output_length: int, levels: int, h: int, kernel_size: int,
+                 regularizer: Tuple[float, float] = (0, 0), **kwargs):
+        super(SciNet, self).__init__(**kwargs)
+        self.levels = levels
+        self.sciblocks = [SciBlock(kernel_size, h) for _ in range(2 ** (levels + 1) - 1)]  # tree of sciblocks
         self.interleave = Interleave()
         self.flatten = tf.keras.layers.Flatten()
-        # self.dense1 = tf.keras.layers.Dense(100, kernel_regularizer=L1L2(0.001, 0.01))
         self.dense = tf.keras.layers.Dense(output_length, kernel_regularizer=L1L2(0.001, 0.01))
-        self.regularizer = tf.keras.layers.ActivityRegularization(l1=regularizer[0], l2=regularizer[1])
+        # self.regularizer = tf.keras.layers.ActivityRegularization(l1=regularizer[0], l2=regularizer[1])
 
     def build(self, input_shape):
-        assert input_shape[1] / 2 ** 1 % 1 == 0  # inputs must be evenly divided at the lowest level of the tree
+        if input_shape[1] / 2 ** self.levels % 1 == 0:
+            raise ValueError('Malformed input shape. Input must be divisible by all nodes in the tree.')
         [layer.build(input_shape) for layer in self.sciblocks]
 
-    def call(self, input_tensor):
+    def call(self, inputs):
         # cascade input down a binary tree of sci-blocks
-        inputs = [input_tensor]
+        lvl_inputs = [inputs]
         for i in range(self.level):
             i_end = 2 ** (i + 1) - 1
             i_start = i_end - 2 ** i
-            outputs = [out for j, tensor in zip(range(i_start, i_end), inputs) for out in self.sciblocks[j](tensor)]
-            inputs = outputs
+            lvl_outputs = [out for j, tensor in zip(range(i_start, i_end), lvl_inputs)
+                           for out in self.sciblocks[j](tensor)]
+            lvl_inputs = lvl_outputs
 
-        x = self.interleave(outputs)
-        x += input_tensor
+        x = self.interleave(lvl_outputs)
+        x += inputs
 
         x = self.flatten(x)
-        # x = self.dense1(x)
         x = self.dense(x)
 
         # x = self.regularizer(x)
         return x
+
+
+# class StackedSciNet(tf.keras.layers.Layer):
+#     def __init__(self, stacks: int, output_length: int, level: int, h: int, kernel_size: int,
+#                  regularizer: Tuple[float, float] = (0, 0), **kwargs):
+#         super(StackedSciNet, self).__init__(**kwargs)
+#         assert stacks > 0
+#         self.sci_nets = [SciNet(output_length, level, h, kernel_size, regularizer) for _ in range(stacks)]
+#
+#     def build(self, input_shape):
+#         [stack.build(input_shape) for stack in self.stacks]
+#
+#     def call(self, inputs):
+#         stack_outputs = []
+#         for sci_net in self.sci_nets:
+#             x = sci_net(x)
+#             stack_outputs.append(x)
+#
+#         # calculate loss as sum of mean of norms of differences between output and input feature vectors for each stack
+#         stack_outputs = tf.stack(stack_outputs)
+#         loss = tf.linalg.normalize(stack_outputs - inputs, 2)[1]
+#         loss = tf.reshape(loss, (-1, self.output_length))
+#         loss = tf.reduce_sum(loss, 1)
+#         loss = loss / self.output_length
+#         loss = tf.reduce_sum(loss)
+#         self.add_loss(loss)
+#
+#         return x
