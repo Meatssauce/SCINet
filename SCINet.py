@@ -102,7 +102,8 @@ class SciNet(tf.keras.layers.Layer):
 
     def build(self, input_shape):
         if input_shape[1] / 2 ** self.levels % 1 != 0:
-            raise ValueError(f'timestamps {input_shape[1]} is not divisible by a tree with {self.levels} levels')
+            raise ValueError(f'timestamps {input_shape[1]} must be evenly divisible by a tree with '
+                             f'{self.levels} levels')
         [layer.build(input_shape) for layer in self.sciblocks]
 
     def call(self, inputs):
@@ -131,26 +132,37 @@ class StackedSciNet(tf.keras.layers.Layer):
         if stacks < 1:
             raise ValueError('Must have at least 1 stack')
         super(StackedSciNet, self).__init__(**kwargs)
+        self.output_length = output_length
         self.scinets = [SciNet(output_length, levels, h, kernel_size, regularizer) for _ in range(stacks)]
+        self.mse_fn = tf.keras.metrics.MeanSquaredError()
+        self.mae_fn = tf.keras.metrics.MeanAbsoluteError()
 
     def build(self, input_shape):
         [stack.build(input_shape) for stack in self.scinets]
 
-    def call(self, inputs):
+    def call(self, inputs, targets=None, sample_weights=None):
         x = inputs
         outputs = []
         for scinet in self.scinets:
             x = scinet(x)
             outputs.append(x)  # keep each stack's output for intermediate supervision
 
-        # calculate loss as sum of mean of norms of differences between output and input feature vectors for each stack
-        outputs = tf.stack(outputs)
-        temp = outputs - inputs
-        loss = tf.linalg.normalize(temp, 2)[1]
-        loss = tf.reshape(loss, (-1, self.output_length))
-        loss = tf.reduce_sum(loss, 1)
-        loss = loss / self.output_length
-        loss = tf.reduce_sum(loss)
-        self.add_loss(loss)
+        if targets is not None:
+            # Calculate loss as sum of mean of norms of differences between output and input feature vectors for
+            # each stack
+            outputs = tf.stack(outputs)
+            temp = outputs - targets
+            loss = tf.linalg.normalize(temp, axis=1)[1]
+            loss = tf.reshape(loss, (-1, self.output_length))
+            loss = tf.reduce_sum(loss, 1)
+            loss = loss / self.output_length
+            loss = tf.reduce_sum(loss)
+            self.add_loss(loss)
+
+            # Calculate metrics
+            mse = self.mse_fn(targets, x, sample_weights)
+            mae = self.mae_fn(targets, x, sample_weights)
+            self.add_metric(mse, name='mean_squared_error')
+            self.add_metric(mse, name='mean_absolute_error')
 
         return x
