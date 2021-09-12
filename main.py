@@ -33,12 +33,12 @@ def make_model(input_shape, output_shape):
 
 
 # Parametres
-data_filepath = 'ETH-USD-2020-06-01.csv'
-y_col = 'close'
-index_col = 'time'
-# data_filepath = 'ETDataset-main/ETT-small/ETTh1.csv'
-# y_col = 'OT'
-# index_col = 'date'
+# data_filepath = 'ETH-USD-2020-06-01.csv'
+# y_col = 'close'
+# index_col = 'time'
+data_filepath = 'ETDataset-main/ETT-small/ETTh1.csv'
+y_col = 'OT'
+index_col = 'date'
 degree_of_differencing = 0
 look_back_window, forecast_horizon = 128, 12
 batch_size = 4
@@ -67,7 +67,7 @@ if __name__ == '__main__':
     early_stopping = EarlyStopping(monitor='val_loss', patience=100, min_delta=0, verbose=1, restore_best_weights=True)
     history = model.fit({'inputs': X_train, 'targets': y_train},
                         validation_data={'inputs': X_val, 'targets': y_val},
-                        batch_size=batch_size, epochs=100000, callbacks=[early_stopping])
+                        batch_size=batch_size, callbacks=[early_stopping])
 
     # Generate new id and create save directory
     existing_ids = [int(name) for name in os.listdir('saved-models/') if name.isnumeric()]
