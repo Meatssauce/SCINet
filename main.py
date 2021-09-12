@@ -33,12 +33,12 @@ def make_model(input_shape, output_shape):
 
 
 # Parametres
-# data_filepath = 'ETH-USD-2020-06-01.csv'
-# y_col = 'close'
-# index_col = 'time'
-data_filepath = 'ETDataset-main/ETT-small/ETTh1.csv'
-y_col = 'OT'
-index_col = 'date'
+data_filepath = 'ETH-USD-2020-06-01.csv'
+y_col = 'close'
+index_col = 'time'
+# data_filepath = 'ETDataset-main/ETT-small/ETTh1.csv'
+# y_col = 'OT'
+# index_col = 'date'
 degree_of_differencing = 0
 look_back_window, forecast_horizon = 128, 12
 batch_size = 4
@@ -63,48 +63,48 @@ if __name__ == '__main__':
     X_val, y_val = preprocessor.transform(val_data)
     print(f'Input shape: X{X_train.shape}, y{y_train.shape}')
 
-    # model = make_model(X_train.shape, y_train.shape)
-    # early_stopping = EarlyStopping(monitor='val_loss', patience=100, min_delta=0, verbose=1, restore_best_weights=True)
-    # history = model.fit({'inputs': X_train, 'targets': y_train},
-    #                     validation_data={'inputs': X_val, 'targets': y_val},
-    #                     batch_size=batch_size, epochs=100000, callbacks=[early_stopping])
-    #
-    # # Generate new id and create save directory
-    # existing_ids = [int(name) for name in os.listdir('saved-models/') if name.isnumeric()]
-    # run_id = random.choice(list(set(range(0, 1000)) - set(existing_ids)))
-    # save_directory = f'saved-models/regressor/{run_id:03d}/'
-    # os.makedirs(os.path.dirname(save_directory), exist_ok=True)
-    #
-    # # Save model, preprocessor and training history
-    # model.save(save_directory)
-    # with open(save_directory + 'preprocessor', 'wb') as f:
-    #     dump(preprocessor, f, compress=3)
-    # pd.DataFrame(history.history).to_csv(save_directory + 'train_history.csv')
-    #
-    # # Plot accuracy
-    # plt.plot(history.history['mean_absolute_error'])
-    # plt.plot(history.history['val_mean_absolute_error'])
-    # plt.title('model accuracy')
-    # plt.ylabel('mean absolute error')
-    # plt.xlabel('epoch')
-    # plt.legend(['train', 'validation'], loc='upper right')
-    # plt.savefig(save_directory + 'accuracy.png')
-    # plt.clf()
-    #
-    # # Plot loss
-    # plt.plot(history.history['loss'])
-    # plt.plot(history.history['val_loss'])
-    # plt.title('model loss')
-    # plt.ylabel('loss')
-    # plt.xlabel('epoch')
-    # plt.legend(['train', 'validation'], loc='upper right')
-    # plt.savefig(save_directory + 'loss.png')
+    model = make_model(X_train.shape, y_train.shape)
+    early_stopping = EarlyStopping(monitor='val_loss', patience=100, min_delta=0, verbose=1, restore_best_weights=True)
+    history = model.fit({'inputs': X_train, 'targets': y_train},
+                        validation_data={'inputs': X_val, 'targets': y_val},
+                        batch_size=batch_size, epochs=100000, callbacks=[early_stopping])
+
+    # Generate new id and create save directory
+    existing_ids = [int(name) for name in os.listdir('saved-models/') if name.isnumeric()]
+    run_id = random.choice(list(set(range(0, 1000)) - set(existing_ids)))
+    save_directory = f'saved-models/regressor/{run_id:03d}/'
+    os.makedirs(os.path.dirname(save_directory), exist_ok=True)
+
+    # Save model, preprocessor and training history
+    model.save(save_directory)
+    with open(save_directory + 'preprocessor', 'wb') as f:
+        dump(preprocessor, f, compress=3)
+    pd.DataFrame(history.history).to_csv(save_directory + 'train_history.csv')
+
+    # Plot accuracy
+    plt.plot(history.history['mean_absolute_error'])
+    plt.plot(history.history['val_mean_absolute_error'])
+    plt.title('model accuracy')
+    plt.ylabel('mean absolute error')
+    plt.xlabel('epoch')
+    plt.legend(['train', 'validation'], loc='upper right')
+    plt.savefig(save_directory + 'accuracy.png')
+    plt.clf()
+
+    # Plot loss
+    plt.plot(history.history['loss'])
+    plt.plot(history.history['val_loss'])
+    plt.title('model loss')
+    plt.ylabel('loss')
+    plt.xlabel('epoch')
+    plt.legend(['train', 'validation'], loc='upper right')
+    plt.savefig(save_directory + 'loss.png')
 
     # Evaluate
-    run_id = 186
-    model = load_model(f'saved-models/regressor/{run_id:03d}/')
-    with open(f'saved-models/regressor/{run_id:03d}/preprocessor', 'rb') as f:
-        preprocessor = load(f)
+    # run_id = 186
+    # model = load_model(f'saved-models/regressor/{run_id:03d}/')
+    # with open(f'saved-models/regressor/{run_id:03d}/preprocessor', 'rb') as f:
+    #     preprocessor = load(f)
     X_test, y_test = preprocessor.transform(test_data)
     scores = model.evaluate({'inputs': X_test, 'targets': y_test})
 

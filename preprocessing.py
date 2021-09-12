@@ -59,9 +59,9 @@ def difference(dataset, interval=1, relative=False, min_price=1e-04):
 class ARIMAPreprocessor(TransformerMixin):
     def __init__(self, y_col: str, look_back_window: int, forecast_horizon: int, stride: int, diff_order: int,
                  relative_diff: bool = True, splitXy: bool = True, scaling: str = 'minmax'):
+        if not (look_back_window > 0 and forecast_horizon > 0 and stride > 0):
+            raise ValueError('look_back_window, forecast_horizon and stride must be positive')
         super().__init__()
-        assert look_back_window > 0 and forecast_horizon > 0 and stride > 0
-
         self.y_col = y_col
         self.y_idx = None
         self.look_back_window = look_back_window
@@ -81,6 +81,8 @@ class ARIMAPreprocessor(TransformerMixin):
         elif scaling == 'robust':
             self.scaler = RobustScaler()
             self.y_scaler = RobustScaler()
+        else:
+            raise ValueError('Invalid value for scaling')
 
     def fit_transform(self, data, **fit_params):
         self.y_idx = list(data.columns).index(self.y_col)
