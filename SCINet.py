@@ -150,9 +150,9 @@ class StackedSciNet(tf.keras.layers.Layer):
         if targets is not None:
             # Calculate loss as sum of mean of norms of differences between output and input feature vectors for
             # each stack
-            outputs = tf.stack(outputs)
-            temp = outputs - targets
-            loss = tf.linalg.normalize(temp, axis=1)[1]
+            stacked_outputs = tf.stack(outputs)
+            differences = stacked_outputs - targets
+            loss = tf.linalg.normalize(differences, axis=1)[1]
             loss = tf.reshape(loss, (-1, self.output_length))
             loss = tf.reduce_sum(loss, 1)
             loss = loss / self.output_length
@@ -163,6 +163,6 @@ class StackedSciNet(tf.keras.layers.Layer):
             mse = self.mse_fn(targets, x, sample_weights)
             mae = self.mae_fn(targets, x, sample_weights)
             self.add_metric(mse, name='mean_squared_error')
-            self.add_metric(mse, name='mean_absolute_error')
+            self.add_metric(mae, name='mean_absolute_error')
 
         return x
