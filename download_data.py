@@ -1,10 +1,10 @@
 import re
-
+from joblib import dump
 import pandas as pd
 from Historic_Crypto import Cryptocurrencies, HistoricalData, LiveCryptoData
 
 
-parametres = [('BTC-USD', 300, '2019-09-01-00-00'),
+parameters = [('BTC-USD', 300, '2019-09-01-00-00'),
               ('ETH-USD', 300, '2019-09-01-00-00'),
               ('LTC-USD', 300, '2019-09-01-00-00'),
               ('BTC-USD', 300, '2019-09-01-00-00'),
@@ -23,17 +23,16 @@ parametres = [('BTC-USD', 300, '2019-09-01-00-00'),
               ('MATIC-USD', 300, '2019-09-01-00-00'),
               ('FIL-USD', 300, '2019-09-01-00-00'),
               ]
-
 data = []
-for coin_pair, granularity, start_date in parametres:
+for coin_pair, granularity, start_date in parameters:
     try:
         new_data = HistoricalData(coin_pair, granularity, start_date).retrieve_data()
         coin = re.sub(r'-USD$', '', coin_pair)
-        new_data = new_data.rename({coin + '/' + col for col in new_data.columns}, axis=1)
+        new_data = new_data.rename({col: coin + '/' + col for col in new_data.columns}, axis=1)
         data.append(new_data)
     except:
-        continue
-from joblib import dump
+        pass
+
 with open('price_data', 'wb') as f:
     dump(data, f)
 data = pd.concat(data, axis=1)
