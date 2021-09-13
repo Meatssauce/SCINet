@@ -28,22 +28,6 @@ class InnerConv1DBlock(tf.keras.layers.Layer):
         return x
 
 
-# class Exp(tf.keras.layers.Layer):
-#     def __init__(self, **kwargs):
-#         super(Exp, self).__init__(**kwargs)
-#
-#     def call(self, inputs):
-#         return tf.math.exp(inputs)
-#
-#
-# class Split(tf.keras.layers.Layer):
-#     def __init__(self, **kwargs):
-#         super(Split, self).__init__(**kwargs)
-#
-#     def call(self, inputs):
-#         return inputs[:, ::2], inputs[:, 1::2]
-
-
 class SciBlock(tf.keras.layers.Layer):
     def __init__(self, kernel_size: int, h: int, **kwargs):
         super(SciBlock, self).__init__(**kwargs)
@@ -97,7 +81,7 @@ class SciNet(tf.keras.layers.Layer):
         self.interleave = Interleave()
         self.flatten = tf.keras.layers.Flatten()
         self.dense = tf.keras.layers.Dense(horizon, kernel_regularizer=L1L2(0.001, 0.01))
-        # self.regularizer = tf.keras.layers.ActivityRegularization(l1=regularizer[0], l2=regularizer[1])
+        self.regularizer = tf.keras.layers.ActivityRegularization(l1=regularizer[0], l2=regularizer[1])
 
         # tree of sciblocks
         self.sciblocks = [SciBlock(kernel_size, h) for _ in range(2 ** (levels + 1) - 1)]
@@ -124,10 +108,8 @@ class SciNet(tf.keras.layers.Layer):
 
         x = self.flatten(x)
         x = self.dense(x)
-        # x = tf.reshape(x, (-1, x.shape[1], 1))
-        # outputs = tf.stack(outputs)
-        # x = tf.reshape(x, (-1, self.horizon, self.features))
-        # x = self.regularizer(x)
+        x = self.regularizer(x)
+
         return x
 
 
