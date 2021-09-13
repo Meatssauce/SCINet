@@ -17,10 +17,11 @@ from SCINet import SciNet, StackedSciNet
 # Make model
 def make_model(input_shape, output_shape):
     inputs = tf.keras.Input(shape=(input_shape[1], input_shape[2]), name='inputs')
-    # y = SciNet(forecast_horizon, levels=levels, h=h, kernel_size=kernel_size, regularizer=(0.001, 0.01))(x)
-    # model = tf.keras.Model(x, y)
-    targets = tf.keras.Input(shape=(output_shape[1]), name='targets')
-    predictions = StackedSciNet(horizon, stacks=K, levels=L, h=h, kernel_size=kernel_size,
+    # x = SciNet(horizon, levels=L, h=h, kernel_size=kernel_size)(inputs)
+    # model = tf.keras.Model(inputs, x)
+    targets = tf.keras.Input(shape=(output_shape[1], output_shape[2]), name='targets')
+    predictions = StackedSciNet(horizon=horizon, features=input_shape[-1], stacks=K, levels=L, h=h,
+                                kernel_size=kernel_size,
                                 regularizer=(l1, l2))(inputs, targets)
     model = tf.keras.Model(inputs=[inputs, targets], outputs=predictions)
 
@@ -33,20 +34,41 @@ def make_model(input_shape, output_shape):
 
 
 # Parametres
-data_filepath = 'crypto_data/Crypto-USD-2019-09-01-00-00.csv'
-y_col = 'ETH/close'
-index_col = 'time'
-# data_filepath = 'ETDataset-main/ETT-small/ETTh1.csv'
-# y_col = 'OT'
-# index_col = 'date'
+# data_filepath = 'crypto_data/Crypto-USD-2019-09-01-00-00.csv'
+# y_col = 'ETH/close'
+# index_col = 'time'
+# degree_of_differencing = 0
+# look_back_window, horizon = 168, 3
+# batch_size = 64
+# learning_rate = 9e-3
+# h, kernel_size, L, K = 4, 5, 3, 1
+# l1, l2 = 0.001, 0.1
+# split_strides = look_back_window + horizon  # unsure if any value lower than this would cause data leak
+# # split_strides = 1
+
+data_filepath = 'ETDataset-main/ETT-small/ETTh1.csv'
+y_col = 'OT'
+index_col = 'date'
 degree_of_differencing = 0
-look_back_window, horizon = 168, 3
-batch_size = 64
+look_back_window, horizon = 48, 24
+batch_size = 4
 learning_rate = 9e-3
 h, kernel_size, L, K = 4, 5, 3, 1
 l1, l2 = 0.001, 0.1
 split_strides = look_back_window + horizon  # unsure if any value lower than this would cause data leak
 # split_strides = 1
+
+# data_filepath = 'solar_AL.csv'
+# y_col = None
+# index_col = None
+# degree_of_differencing = 0
+# look_back_window, horizon = 176, 3
+# batch_size = 1024
+# learning_rate = 1e-4
+# h, kernel_size, L, K = 2, 5, 4, 1
+# l1, l2 = 0.001, 0.1
+# split_strides = look_back_window + horizon  # unsure if any value lower than this would cause data leak
+# # split_strides = 1
 
 
 if __name__ == '__main__':

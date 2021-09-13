@@ -74,14 +74,20 @@ class Interleave(tf.keras.layers.Layer):
 
 
 class SciNet(tf.keras.layers.Layer):
-    def __init__(self, horizon: int, levels: int, h: int, kernel_size: int, regularizer: Tuple[float, float] = (0, 0),
+    def __init__(self, horizon: int, features: int, levels: int, h: int, kernel_size: int, regularizer: Tuple[float, float] = (0, 0),
                  **kwargs):
         super(SciNet, self).__init__(**kwargs)
+        self.horizon = horizon
+        self.features = features
         self.levels = levels
         self.interleave = Interleave()
         self.flatten = tf.keras.layers.Flatten()
-        self.dense = tf.keras.layers.Dense(horizon, kernel_regularizer=L1L2(0.001, 0.01))
-        self.regularizer = tf.keras.layers.ActivityRegularization(l1=regularizer[0], l2=regularizer[1])
+        self.dense = tf.keras.layers.Dense(
+            horizon * features,
+            kernel_regularizer=L1L2(0.001, 0.01),
+            # activity_regularizer=L1L2(0.001, 0.01)
+        )
+        # self.regularizer = tf.keras.layers.ActivityRegularization(l1=regularizer[0], l2=regularizer[1])
 
         # tree of sciblocks
         self.sciblocks = [SciBlock(kernel_size, h) for _ in range(2 ** (levels + 1) - 1)]
@@ -108,13 +114,13 @@ class SciNet(tf.keras.layers.Layer):
 
         x = self.flatten(x)
         x = self.dense(x)
-        x = self.regularizer(x)
+        x = tf.reshape(x, (-1, self.horizon, self.features))
 
         return x
 
 
 class StackedSciNet(tf.keras.layers.Layer):
-    def __init__(self, horizon: int, stacks: int, levels: int, h: int, kernel_size: int,
+    def __init__(self, horizon: int, features: int, stacks: int, levels: int, h: int, kernel_size: int,
                  regularizer: Tuple[float, float] = (0, 0), **kwargs):
         """
         :param horizon: number of time stamps in output
@@ -130,7 +136,8 @@ class StackedSciNet(tf.keras.layers.Layer):
             raise ValueError('Must have at least 1 stack')
         super(StackedSciNet, self).__init__(**kwargs)
         self.horizon = horizon
-        self.scinets = [SciNet(horizon, levels, h, kernel_size, regularizer) for _ in range(stacks)]
+        self.features = features
+        self.scinets = [SciNet(horizon, features, levels, h, kernel_size, regularizer) for _ in range(stacks)]
         self.mse_fn = tf.keras.metrics.MeanSquaredError()
         self.mae_fn = tf.keras.metrics.MeanAbsoluteError()
 
@@ -143,7 +150,7 @@ class StackedSciNet(tf.keras.layers.Layer):
         for scinet in self.scinets:
             x = scinet(inputs)
             outputs.append(x)  # keep each stack's output for intermediate supervision
-            inputs = tf.concat([x, inputs[:, x.shape[1]:, -1]], axis=1)
+            inputs = tf.concat([x, inputs[:, x.shape[1]:, :]], axis=1)
 
         if targets is not None:
             # Calculate loss as sum of mean of norms of differences between output and input feature vectors for

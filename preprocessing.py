@@ -85,7 +85,7 @@ class ARIMAPreprocessor(TransformerMixin):
             raise ValueError('Invalid value for scaling')
 
     def fit_transform(self, data, **fit_params):
-        self.y_idx = list(data.columns).index(self.y_col)
+        # self.y_idx = list(data.columns).index(self.y_col)
 
         # Fill missing values via interpolation
         data = self.interpolation_imputer.fit_transform(data)
@@ -108,7 +108,7 @@ class ARIMAPreprocessor(TransformerMixin):
 
         # Extract X, y from time series
         X, y = split_sequence(data, self.look_back_window, self.forecast_horizon, self.stride)
-        y = y[:, :, self.y_idx]
+        # y = y[:, :, self.y_idx]
 
         return X, y
 
@@ -133,6 +133,6 @@ class ARIMAPreprocessor(TransformerMixin):
 
         # Extract X, y
         X, y = split_sequence(data, self.look_back_window, self.forecast_horizon, self.stride)
-        y = y[:, :, self.y_idx]
+        # y = y[:, :, self.y_idx]
 
         return X, y
