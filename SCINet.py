@@ -5,7 +5,8 @@ from tensorflow.keras.regularizers import L1L2
 
 class InnerConv1DBlock(tf.keras.layers.Layer):
     def __init__(self, filters: int, h: float, kernel_size: int, neg_slope: float = .01, dropout: float = .5, **kwargs):
-        assert filters > 0 and h > 0
+        if filters <= 0 or h <= 0:
+            raise ValueError('filters and h cannot be <= 0')
         super(InnerConv1DBlock, self).__init__(**kwargs)
         self.conv1d = tf.keras.layers.Conv1D(max(round(h * filters), 1), kernel_size, padding='same')
         self.leakyrelu = tf.keras.layers.LeakyReLU(neg_slope)
@@ -44,14 +45,15 @@ class InnerConv1DBlock(tf.keras.layers.Layer):
 
 
 class SciBlock(tf.keras.layers.Layer):
-    def __init__(self, output_length: int, kernel_size: int, h: int, **kwargs):
+    def __init__(self, kernel_size: int, h: int, **kwargs):
         super(SciBlock, self).__init__(**kwargs)
         self.h = h
         self.kernel_size = kernel_size
 
     def build(self, input_shape):
-        self.conv1ds = {k: InnerConv1DBlock(input_shape[2], self.h, self.kernel_size, name=k)  # regularize?
+        self.conv1ds = {k: InnerConv1DBlock(input_shape[-1], self.h, self.kernel_size, name=k)  # regularize?
                         for k in ['psi', 'phi', 'eta', 'rho']}
+        super().build(input_shape)
         # [layer.build(input_shape) for layer in self.conv1ds.values()]  # unneeded?
 
     def call(self, inputs):
@@ -88,23 +90,24 @@ class Interleave(tf.keras.layers.Layer):
 
 
 class SciNet(tf.keras.layers.Layer):
-    def __init__(self, output_length: int, levels: int, h: int, kernel_size: int,
-                 regularizer: Tuple[float, float] = (0, 0), **kwargs):
+    def __init__(self, horizon: int, levels: int, h: int, kernel_size: int, regularizer: Tuple[float, float] = (0, 0),
+                 **kwargs):
         super(SciNet, self).__init__(**kwargs)
         self.levels = levels
         self.interleave = Interleave()
         self.flatten = tf.keras.layers.Flatten()
-        self.dense = tf.keras.layers.Dense(output_length, kernel_regularizer=L1L2(0.001, 0.01))
+        self.dense = tf.keras.layers.Dense(horizon, kernel_regularizer=L1L2(0.001, 0.01))
         # self.regularizer = tf.keras.layers.ActivityRegularization(l1=regularizer[0], l2=regularizer[1])
 
         # tree of sciblocks
-        self.sciblocks = [SciBlock(output_length, kernel_size, h) for _ in range(2 ** (levels + 1) - 1)]
+        self.sciblocks = [SciBlock(kernel_size, h) for _ in range(2 ** (levels + 1) - 1)]
 
     def build(self, input_shape):
         if input_shape[1] / 2 ** self.levels % 1 != 0:
             raise ValueError(f'timestamps {input_shape[1]} must be evenly divisible by a tree with '
                              f'{self.levels} levels')
-        [layer.build(input_shape) for layer in self.sciblocks]
+        super().build(input_shape)
+        # [layer.build(input_shape) for layer in self.sciblocks]  # input_shape
 
     def call(self, inputs):
         # cascade input down a binary tree of sci-blocks
@@ -121,31 +124,44 @@ class SciNet(tf.keras.layers.Layer):
 
         x = self.flatten(x)
         x = self.dense(x)
-
+        # x = tf.reshape(x, (-1, x.shape[1], 1))
+        # outputs = tf.stack(outputs)
+        # x = tf.reshape(x, (-1, self.horizon, self.features))
         # x = self.regularizer(x)
         return x
 
 
 class StackedSciNet(tf.keras.layers.Layer):
-    def __init__(self, output_length: int, stacks: int, levels: int, h: int, kernel_size: int,
+    def __init__(self, horizon: int, features: int, stacks: int, levels: int, h: int, kernel_size: int,
                  regularizer: Tuple[float, float] = (0, 0), **kwargs):
+        """
+        :param horizon: number of time stamps in output
+        :param stacks: number of stacked SciNets
+        :param levels: number of levels for each SciNet
+        :param h: scaling factor for convolutional module
+        :param kernel_size: kernel size of convolutional module
+        :param regularizer: activity regularization
+        :param kwargs:
+        """
+
         if stacks < 1:
             raise ValueError('Must have at least 1 stack')
         super(StackedSciNet, self).__init__(**kwargs)
-        self.output_length = output_length
-        self.scinets = [SciNet(output_length, levels, h, kernel_size, regularizer) for _ in range(stacks)]
+        self.horizon = horizon
+        self.scinets = [SciNet(horizon, levels, h, kernel_size, regularizer) for _ in range(stacks)]
         self.mse_fn = tf.keras.metrics.MeanSquaredError()
         self.mae_fn = tf.keras.metrics.MeanAbsoluteError()
 
-    def build(self, input_shape):
-        [stack.build(input_shape) for stack in self.scinets]
+    # def build(self, input_shape):
+    #     super().build(input_shape)
+    #     # [stack.build(input_shape) for stack in self.scinets]
 
     def call(self, inputs, targets=None, sample_weights=None):
-        x = inputs
         outputs = []
         for scinet in self.scinets:
-            x = scinet(x)
+            x = scinet(inputs)
             outputs.append(x)  # keep each stack's output for intermediate supervision
+            inputs = tf.concat([x, inputs[:, x.shape[1]:, -1]], axis=1)
 
         if targets is not None:
             # Calculate loss as sum of mean of norms of differences between output and input feature vectors for
@@ -153,9 +169,9 @@ class StackedSciNet(tf.keras.layers.Layer):
             stacked_outputs = tf.stack(outputs)
             differences = stacked_outputs - targets
             loss = tf.linalg.normalize(differences, axis=1)[1]
-            loss = tf.reshape(loss, (-1, self.output_length))
+            loss = tf.reshape(loss, (-1, self.horizon))
             loss = tf.reduce_sum(loss, 1)
-            loss = loss / self.output_length
+            loss = loss / self.horizon
             loss = tf.reduce_sum(loss)
             self.add_loss(loss)
 

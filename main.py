@@ -20,7 +20,7 @@ def make_model(input_shape, output_shape):
     # y = SciNet(forecast_horizon, levels=levels, h=h, kernel_size=kernel_size, regularizer=(0.001, 0.01))(x)
     # model = tf.keras.Model(x, y)
     targets = tf.keras.Input(shape=(output_shape[1]), name='targets')
-    predictions = StackedSciNet(forecast_horizon, stacks=stacks, levels=levels, h=h, kernel_size=kernel_size,
+    predictions = StackedSciNet(horizon, input_shape[2], stacks=K, levels=L, h=h, kernel_size=kernel_size,
                                 regularizer=(0.001, 0.01))(inputs, targets)
     model = tf.keras.Model(inputs=[inputs, targets], outputs=predictions)
 
@@ -33,19 +33,19 @@ def make_model(input_shape, output_shape):
 
 
 # Parametres
-# data_filepath = 'ETH-USD-2020-06-01.csv'
-# y_col = 'close'
+# data_filepath = 'crypto_data/Crypto-USD-2019-09-01-00-00.csv'
+# y_col = 'ETH/close'
 # index_col = 'time'
 data_filepath = 'ETDataset-main/ETT-small/ETTh1.csv'
 y_col = 'OT'
 index_col = 'date'
 degree_of_differencing = 0
-look_back_window, forecast_horizon = 128, 12
-batch_size = 4
+look_back_window, horizon = 168, 3
+batch_size = 256
 learning_rate = 9e-3
-h, kernel_size, levels, stacks = 4, 5, 3, 1
-strides = look_back_window + forecast_horizon  # unsure if any value lower than this would cause data leak
-# strides = 1
+h, kernel_size, L, K = 4, 5, 3, 1
+# strides = look_back_window + forecast_horizon  # unsure if any value lower than this would cause data leak
+strides = 1
 
 
 if __name__ == '__main__':
@@ -57,8 +57,8 @@ if __name__ == '__main__':
     test_data = data[int(0.8 * len(data)):]
 
     # Train model
-    preprocessor = ARIMAPreprocessor(y_col, look_back_window, forecast_horizon, strides, degree_of_differencing,
-                                     relative_diff=True, scaling='standard')
+    preprocessor = ARIMAPreprocessor(y_col, look_back_window, horizon, strides, degree_of_differencing,
+                                     relative_diff=False, scaling='standard')
     X_train, y_train = preprocessor.fit_transform(train_data)
     X_val, y_val = preprocessor.transform(val_data)
     print(f'Input shape: X{X_train.shape}, y{y_train.shape}')
@@ -67,7 +67,7 @@ if __name__ == '__main__':
     early_stopping = EarlyStopping(monitor='val_loss', patience=100, min_delta=0, verbose=1, restore_best_weights=True)
     history = model.fit({'inputs': X_train, 'targets': y_train},
                         validation_data={'inputs': X_val, 'targets': y_val},
-                        batch_size=batch_size, callbacks=[early_stopping])
+                        batch_size=batch_size, epochs=1, callbacks=[early_stopping])
 
     # Generate new id and create save directory
     existing_ids = [int(name) for name in os.listdir('saved-models/') if name.isnumeric()]

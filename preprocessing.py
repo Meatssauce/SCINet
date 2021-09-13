@@ -21,7 +21,7 @@ def split_sequence(sequence, look_back_window: int, forecast_horizon: int, strid
     return np.asarray(X), np.asarray(y)
 
 
-class StocksImputer(TransformerMixin):
+class TimeSeriesImputer(TransformerMixin):
     def __init__(self, method: str = 'linear', fail_save: TransformerMixin = SimpleImputer()):
         self.method = method
         self.fail_save = fail_save
@@ -70,7 +70,7 @@ class ARIMAPreprocessor(TransformerMixin):
         self.diff_order = diff_order
         self.relative_diff = relative_diff
         self.splitXy = splitXy
-        self.interpolation_imputer = StocksImputer(method='linear')
+        self.interpolation_imputer = TimeSeriesImputer(method='linear')
 
         if scaling == 'minmax':
             self.scaler = MinMaxScaler()

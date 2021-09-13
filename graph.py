@@ -1,7 +1,7 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from main import degree_of_differencing, look_back_window, forecast_horizon, stride, data_filepath, y_col, index_col
+from main import degree_of_differencing, look_back_window, horizon, stride, data_filepath, y_col, index_col
 from preprocessing import ARIMAPreprocessor
 
 
@@ -15,7 +15,7 @@ val_data = data[int(0.6 * len(data)):int(0.8 * len(data))]
 test_data = data[int(0.8 * len(data)):]
 
 idx = train_data.index
-preprocessor = ARIMAPreprocessor(y_col, look_back_window, forecast_horizon, stride, degree_of_differencing,
+preprocessor = ARIMAPreprocessor(y_col, look_back_window, horizon, stride, degree_of_differencing,
                                  splitXy=False, relative_diff=False, scaling='standard')
 train_data = preprocessor.fit_transform(train_data)
 
