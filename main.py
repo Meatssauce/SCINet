@@ -65,7 +65,7 @@ if __name__ == '__main__':
     print(f'Input shape: X{X_train.shape}, y{y_train.shape}')
 
     model = make_model(X_train.shape, y_train.shape)
-    early_stopping = EarlyStopping(monitor='val_loss', patience=100, min_delta=0, verbose=1, restore_best_weights=True)
+    early_stopping = EarlyStopping(monitor='val_loss', patience=50, min_delta=0, verbose=1, restore_best_weights=True)
     history = model.fit({'inputs': X_train, 'targets': y_train},
                         validation_data={'inputs': X_val, 'targets': y_val},
                         batch_size=batch_size, epochs=800, callbacks=[early_stopping])
