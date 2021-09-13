@@ -132,7 +132,7 @@ class SciNet(tf.keras.layers.Layer):
 
 
 class StackedSciNet(tf.keras.layers.Layer):
-    def __init__(self, horizon: int, features: int, stacks: int, levels: int, h: int, kernel_size: int,
+    def __init__(self, horizon: int, stacks: int, levels: int, h: int, kernel_size: int,
                  regularizer: Tuple[float, float] = (0, 0), **kwargs):
         """
         :param horizon: number of time stamps in output

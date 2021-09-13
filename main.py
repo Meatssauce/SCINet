@@ -20,7 +20,7 @@ def make_model(input_shape, output_shape):
     # y = SciNet(forecast_horizon, levels=levels, h=h, kernel_size=kernel_size, regularizer=(0.001, 0.01))(x)
     # model = tf.keras.Model(x, y)
     targets = tf.keras.Input(shape=(output_shape[1]), name='targets')
-    predictions = StackedSciNet(horizon, input_shape[2], stacks=K, levels=L, h=h, kernel_size=kernel_size,
+    predictions = StackedSciNet(horizon, stacks=K, levels=L, h=h, kernel_size=kernel_size,
                                 regularizer=(0.001, 0.01))(inputs, targets)
     model = tf.keras.Model(inputs=[inputs, targets], outputs=predictions)
 
