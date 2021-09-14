@@ -145,8 +145,8 @@ if __name__ == '__main__':
     # Predict
     # y_test is only used to calculate loss, how to get rid of it?
     y_pred = model.predict({'inputs': X_test, 'targets': y_test})
-    y_pred = preprocessor.y_scaler.inverse_transform(y_pred.reshape(-1, 1))
-    y_test = preprocessor.y_scaler.inverse_transform(y_test.reshape(-1, 1))
+    y_pred = preprocessor.scaler.inverse_transform(y_pred.reshape(-1, 1))
+    y_test = preprocessor.scaler.inverse_transform(y_test.reshape(-1, 1))
     comparison = np.hstack([y_pred, y_test])
     df = pd.DataFrame(comparison, columns=['Predicted', 'Actual'])
     df.to_csv(f'saved-models/regressor/{run_id:03d}/comparison.csv')
