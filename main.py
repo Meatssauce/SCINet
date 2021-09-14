@@ -80,7 +80,7 @@ if __name__ == '__main__':
     test_data = data[int(0.8 * len(data)):]
 
     # Train model
-    preprocessor = ARIMAPreprocessor(y_col, look_back_window, horizon, split_strides, degree_of_differencing,
+    preprocessor = ARIMAPreprocessor(look_back_window, horizon, split_strides, degree_of_differencing,
                                      relative_diff=False, scaling='standard')
     X_train, y_train = preprocessor.fit_transform(train_data)
     X_val, y_val = preprocessor.transform(val_data)
