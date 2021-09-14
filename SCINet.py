@@ -44,7 +44,7 @@ class SciBlock(tf.keras.layers.Layer):
         F_odd, F_even = inputs[:, ::2], inputs[:, 1::2]
 
         F_s_odd = F_odd * tf.math.exp(self.conv1ds['phi'](F_even))
-        F_s_even = F_even * tf.math.exp(self.conv1ds['psi'](F_s_odd))
+        F_s_even = F_even * tf.math.exp(self.conv1ds['psi'](F_odd))
 
         F_prime_odd = F_s_odd + self.conv1ds['rho'](F_s_even)
         F_prime_even = F_s_even - self.conv1ds['eta'](F_s_odd)
