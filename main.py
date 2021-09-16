@@ -43,7 +43,7 @@ def make_model(input_shape, output_shape):
 # learning_rate = 9e-3
 # h, kernel_size, L, K = 4, 5, 3, 1
 # l1, l2 = 0.001, 0.1
-# split_strides = look_back_window + horizon  # unsure if any value lower than this would cause data leak
+# split_strides = look_back_window + horizon
 # # split_strides = 1
 
 data_filepath = 'ETDataset-main/ETT-small/ETTh1.csv'
@@ -55,7 +55,7 @@ batch_size = 4
 learning_rate = 9e-3
 h, kernel_size, L, K = 4, 5, 3, 1
 l1, l2 = 0.001, 0.1
-split_strides = look_back_window + horizon  # unsure if any value lower than this would cause data leak
+split_strides = look_back_window + horizon
 # split_strides = 1
 
 # data_filepath = 'solar_AL.csv'
@@ -67,7 +67,7 @@ split_strides = look_back_window + horizon  # unsure if any value lower than thi
 # learning_rate = 1e-4
 # h, kernel_size, L, K = 2, 5, 4, 1
 # l1, l2 = 0.001, 0.1
-# split_strides = look_back_window + horizon  # unsure if any value lower than this would cause data leak
+# split_strides = look_back_window + horizon
 # # split_strides = 1
 
 

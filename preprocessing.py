@@ -61,6 +61,9 @@ class ARIMAPreprocessor(TransformerMixin):
                  relative_diff: bool = True, splitXy: bool = True, scaling: str = 'minmax'):
         if not (look_back_window > 0 and forecast_horizon > 0 and stride > 0):
             raise ValueError('look_back_window, forecast_horizon and stride must be positive')
+        if stride < look_back_window + forecast_horizon:
+            raise PendingDeprecationWarning('Setting stride to less than look_back_window + forecast_horizon may not'
+                                            'be supported in the future due to potential data leak.')
         super().__init__()
         self.look_back_window = look_back_window
         self.forecast_horizon = forecast_horizon

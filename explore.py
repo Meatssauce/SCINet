@@ -1,42 +1,59 @@
 import pandas as pd
 import numpy as np
 import re
-import matplotlib.pyplot as plt
 from joblib import dump
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
 from preprocessing import TimeSeriesImputer
 
-df = pd.read_csv('crypto_data/Crypto-USD-2019-09-01-00-00.csv', index_col='time')
+
+def lower_granularity(df, interval):
+    if not isinstance(df.index, pd.DatetimeIndex):
+        raise IndexError('Dataframe must have datetime index')
+
+    df = df.sort_index()
+    prev_interval = df.index[1] - df.index[0]
+    if np.abs(interval) < np.abs(prev_interval):
+        raise ValueError('Cannot increase granularity')
+    if (bin_width := interval / prev_interval) % 1 != 0:
+        raise ValueError('New interval must evenly divide the current interval')
+    bin_width = int(bin_width)
+
+    # Resample data from most recent to least recent
+    df2 = df.reset_index(drop=True)
+    data = {'low': np.vstack([df2.loc[i - bin_width:i, 'low'].min().values
+                              for i in range(len(df2) - 1, -1, -bin_width)]),
+            'high': np.vstack([df2.loc[i - bin_width:i, 'high'].max().values
+                               for i in range(len(df2) - 1, -1, -bin_width)]),
+            'open': np.vstack([df2.loc[i - bin_width if i >= bin_width else 0, 'open'].values
+                               for i in range(len(df2) - 1, -1, -bin_width)]),
+            'close': np.vstack([df2.loc[i, 'close'].values
+                                for i in range(len(df2) - 1, -1, -bin_width)]),
+            'price': np.vstack([df2.loc[i - bin_width:i, 'price'].mean().values
+                                for i in range(len(df2) - 1, -1, -bin_width)]),
+            'volume': np.vstack([df2.loc[i - bin_width:i, 'volume'].mean().values
+                                 for i in range(len(df2) - 1, -1, -bin_width)]),
+            }
+    df2 = df[::-1][::bin_width]
+    for category, values in data.items():
+        df2.loc[:, category] = values
+
+    return df2[::-1]
+
+
+# Exploring cryptocurrency data
+
+# Load and index data
+df = pd.read_csv('crypto_data/USD-2021-06-17-2021-09-12.csv', index_col=0, header=[0, 1])
 df.index = pd.to_datetime(df.index)
 
 first_valid_idx = max([df[col].first_valid_index() for col in df.columns])
 last_valid_idx = min([df[col].last_valid_index() for col in df.columns])
-columns_of_interest = [col for col in df.columns if 'close' in col]
+df = df.loc[first_valid_idx:last_valid_idx, :]
 
-df_plot = df.loc[pd.Timestamp('2020-09-01 00:00'):pd.Timestamp('2021-09-01 00:00'), columns_of_interest]
+# Make new multi-index dataframe for average price
+df_price = (df.loc[:, 'open'] + df.loc[:, 'close']) / 2
+df_price.columns = pd.MultiIndex.from_tuples(list(zip(['price'] * df_price.shape[1], df_price.columns)))
 
-imputer = TimeSeriesImputer()
-scaler = StandardScaler()
-data = imputer.fit_transform(df_plot)
-data = scaler.fit_transform(data)
-df_plot = pd.DataFrame(data, columns=df_plot.columns, index=df_plot.index)
-
-df_plot.plot()
-
-# from tslearn.clustering import TimeSeriesKMeans
-# model = TimeSeriesKMeans(n_clusters=3, metric="dtw", max_iter=10)
-# model.fit(data)
-
-# values = dataset.values
-# # specify columns to plot
-# groups = [0, 1, 2, 3, 5, 6, 7]
-# i = 1
-# # plot each column
-# pyplot.figure()
-# for group in groups:
-# 	pyplot.subplot(len(groups), 1, i)
-# 	pyplot.plot(values[:, group])
-# 	pyplot.title(dataset.columns[group], y=0.5, loc='right')
-# 	i += 1
-# pyplot.show()
+# Add concatenate two dataframes
+df = pd.concat([df, df_price], axis=1).sort_values(by=['category', 'coin'], axis=1)
