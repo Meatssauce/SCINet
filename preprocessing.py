@@ -56,14 +56,14 @@ def difference(dataset, interval=1, relative=False, min_price=1e-04):
     return np.asarray(delta)
 
 
-class ARIMAPreprocessor(TransformerMixin):
+class TimeSeriesPreprocessor(TransformerMixin):
     def __init__(self, look_back_window: int, forecast_horizon: int, stride: int, diff_order: int,
                  relative_diff: bool = True, splitXy: bool = True, scaling: str = 'minmax'):
         if not (look_back_window > 0 and forecast_horizon > 0 and stride > 0):
             raise ValueError('look_back_window, forecast_horizon and stride must be positive')
-        if stride < look_back_window + forecast_horizon:
-            raise PendingDeprecationWarning('Setting stride to less than look_back_window + forecast_horizon may not'
-                                            'be supported in the future due to potential data leak.')
+        # if stride < look_back_window + forecast_horizon:
+        #     raise PendingDeprecationWarning('Setting stride to less than look_back_window + forecast_horizon may not'
+        #                                     'be supported in the future due to potential data leak.')
         super().__init__()
         self.look_back_window = look_back_window
         self.forecast_horizon = forecast_horizon
@@ -127,5 +127,94 @@ class ARIMAPreprocessor(TransformerMixin):
 
         # Extract X, y
         X, y = split_sequence(data, self.look_back_window, self.forecast_horizon, self.stride)
+
+        return X, y
+
+
+class CryptoPreprocessor(TransformerMixin):
+    def __init__(self, look_back_window: int = 168, forecast_horizon: int = 24, stride: int = 1, diff_order: int = 0,
+                 relative_diff: bool = True, splitXy: bool = True, target_coin: str = None):
+        if not (look_back_window > 0 and forecast_horizon > 0 and stride > 0):
+            raise ValueError('look_back_window, forecast_horizon and stride must be positive')
+        # if stride < look_back_window + forecast_horizon:
+        #     raise PendingDeprecationWarning('Setting stride to less than look_back_window + forecast_horizon may not'
+        #                                     'be supported in the future due to potential data leak.')
+        super().__init__()
+        self.look_back_window = look_back_window
+        self.forecast_horizon = forecast_horizon
+        self.stride = stride
+        self.diff_order = diff_order
+        self.relative_diff = relative_diff
+        self.splitXy = splitXy
+        self.target_coin = target_coin
+        self.interpolation_imputer = TimeSeriesImputer(method='linear')
+        self.scaler = {}
+
+    def fit_transform(self, df, **fit_params):
+        # Fill missing values via interpolation
+        df = pd.DataFrame(self.interpolation_imputer.fit_transform(df), index=df.index, columns=df.columns)
+
+        # # Differencing
+        # diff = np.array(data)
+        # for d in range(1, self.diff_order + 1):
+        #     diff = difference(diff, relative=self.relative_diff)
+        #     data = np.append(data, np.pad(diff, pad_width=((d, 0), (0, 0))), axis=1)
+        # if self.diff_order > 0:
+        #     data = data[:, diff.shape[1]:]
+
+        # Scale
+        # if self.diff_order < 1:
+        # todo: for each coin scale all categories by fit on price
+        # self.scaler = {coin: StandardScaler() for coin in df.columns.get_level_values('coin')}
+        # for coin in self.scaler.keys():
+        #     df.loc[:, ('price', coin)] = self.scaler[coin].fit_transform(df)
+        #     for
+        # df = pd.DataFrame(self.scaler.fit_transform(df), index=df.index, columns=df.columns)
+
+        # Remove market trend from
+        df = df.sort_values(by=['category'], axis=1)
+        other_coins = [col for col in df.columns.levels[1].unique() if col != 'ETH']
+        df_mean = pd.DataFrame.copy(df.loc[:, (df.columns.levels[0], self.target_coin)])
+        for cat in df.columns.levels[0].unique():
+            df_mean.loc[:, (cat, self.target_coin)] = df.loc[:, (cat, other_coins)].mean(axis=1)
+        df = df.loc[:, (df.columns.levels[0], self.target_coin)] - df_mean
+
+        if not self.splitXy:
+            return df
+
+        # Extract X, y from time series
+        X, y = split_sequence(df, self.look_back_window, self.forecast_horizon, self.stride)
+
+        return X, y
+
+    def transform(self, df):
+        # Fill missing values via interpolation
+        df = pd.DataFrame(self.interpolation_imputer.transform(df), index=df.index, columns=df.columns)
+
+        # # Differencing
+        # diff = np.array(data)
+        # for d in range(1, self.diff_order + 1):
+        #     diff = difference(diff, relative=self.relative_diff)
+        #     data = np.append(data, np.pad(diff, pad_width=((d, 0), (0, 0))), axis=1)
+        # if self.diff_order > 0:
+        #     data = data[:, diff.shape[1]:]
+
+        # Scale
+        # if self.diff_order < 1:
+        df = pd.DataFrame(self.scaler.transform(df), index=df.index, columns=df.columns)
+
+        # Remove market trend from
+        df = df.sort_values(by=['category'], axis=1)
+        other_coins = [col for col in df.columns.levels[1].unique() if col != 'ETH']
+        df_mean = pd.DataFrame.copy(df.loc[:, (df.columns.levels[0], self.target_coin)])
+        for cat in df.columns.levels[0].unique():
+            df_mean.loc[:, (cat, self.target_coin)] = df.loc[:, (cat, other_coins)].mean(axis=1)
+        df = df.loc[:, (df.columns.levels[0], self.target_coin)] - df_mean
+
+        if not self.splitXy:
+            return df
+
+        # Extract X, y
+        X, y = split_sequence(df, self.look_back_window, self.forecast_horizon, self.stride)
 
         return X, y
