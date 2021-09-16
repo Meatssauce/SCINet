@@ -10,8 +10,9 @@ from tensorflow.keras.models import Sequential, load_model
 from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.metrics import RootMeanSquaredError, MeanAbsoluteError
 
-from preprocessing import ARIMAPreprocessor
+from preprocessing import CryptoPreprocessor
 from SCINet import SciNet, StackedSciNet
+from explore import lower_granularity
 
 
 # Make model
@@ -34,63 +35,39 @@ def make_model(input_shape, output_shape):
 
 
 # Parametres
-# data_filepath = 'crypto_data/Crypto-USD-2019-09-01-00-00.csv'
-# y_col = 'ETH/close'
-# index_col = 'time'
-# degree_of_differencing = 0
-# look_back_window, horizon = 168, 3
-# batch_size = 64
-# learning_rate = 9e-3
-# h, kernel_size, L, K = 4, 5, 3, 1
-# l1, l2 = 0.001, 0.1
-# split_strides = look_back_window + horizon
-# # split_strides = 1
-
-data_filepath = 'ETDataset-main/ETT-small/ETTh1.csv'
-y_col = 'OT'
-index_col = 'date'
 degree_of_differencing = 0
-look_back_window, horizon = 48, 24
-batch_size = 4
+look_back_window, horizon = 184, 60
+batch_size = 16
 learning_rate = 9e-3
-h, kernel_size, L, K = 4, 5, 3, 1
+h, kernel_size, L, K = 4, 5, 3, 2
 l1, l2 = 0.001, 0.1
-split_strides = look_back_window + horizon
-# split_strides = 1
-
-# data_filepath = 'solar_AL.csv'
-# y_col = None
-# index_col = None
-# degree_of_differencing = 0
-# look_back_window, horizon = 176, 3
-# batch_size = 1024
-# learning_rate = 1e-4
-# h, kernel_size, L, K = 2, 5, 4, 1
-# l1, l2 = 0.001, 0.1
 # split_strides = look_back_window + horizon
-# # split_strides = 1
+split_strides = 1
 
 
 if __name__ == '__main__':
     # Load and preprocess data
-    data = pd.read_csv(data_filepath, index_col=index_col)
+    data = pd.read_csv('crypto_data/USD-2021-06-17-2021-09-12.csv', index_col=0, header=[0, 1])
+    data.index = pd.to_datetime(data.index)
+
+    data = lower_granularity(data, pd.Timedelta(15, 'min'))
 
     train_data = data[:int(0.6 * len(data))]
     val_data = data[int(0.6 * len(data)):int(0.8 * len(data))]
     test_data = data[int(0.8 * len(data)):]
 
     # Train model
-    preprocessor = ARIMAPreprocessor(look_back_window, horizon, split_strides, degree_of_differencing,
-                                     relative_diff=False, scaling='standard')
+    preprocessor = CryptoPreprocessor(look_back_window, horizon, split_strides, degree_of_differencing,
+                                      relative_diff=False, scaling='standard')
     X_train, y_train = preprocessor.fit_transform(train_data)
     X_val, y_val = preprocessor.transform(val_data)
     print(f'Input shape: X{X_train.shape}, y{y_train.shape}')
 
     model = make_model(X_train.shape, y_train.shape)
-    early_stopping = EarlyStopping(monitor='val_loss', patience=50, min_delta=0, verbose=1, restore_best_weights=True)
+    early_stopping = EarlyStopping(monitor='val_loss', patience=100, min_delta=0, verbose=1, restore_best_weights=True)
     history = model.fit({'inputs': X_train, 'targets': y_train},
                         validation_data={'inputs': X_val, 'targets': y_val},
-                        batch_size=batch_size, epochs=800, callbacks=[early_stopping])
+                        batch_size=batch_size, epochs=1600, callbacks=[early_stopping])
 
     # Generate new id and create save directory
     existing_ids = [int(name) for name in os.listdir('saved-models/') if name.isnumeric()]
@@ -145,8 +122,8 @@ if __name__ == '__main__':
     # Predict
     # y_test is only used to calculate loss, how to get rid of it?
     y_pred = model.predict({'inputs': X_test, 'targets': y_test})
-    y_pred = preprocessor.scaler.inverse_transform(y_pred.reshape(-1, 1))
-    y_test = preprocessor.scaler.inverse_transform(y_test.reshape(-1, 1))
+    y_pred = preprocessor.scaler.inverse_transform()
+    y_test = preprocessor.scaler.inverse_transform()
     comparison = np.hstack([y_pred, y_test])
     df = pd.DataFrame(comparison, columns=['Predicted', 'Actual'])
     df.to_csv(f'saved-models/regressor/{run_id:03d}/comparison.csv')

@@ -3,8 +3,9 @@ import numpy as np
 import re
 from joblib import dump
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
+import matplotlib.pyplot as plt
 
-from preprocessing import TimeSeriesImputer
+from preprocessing import TimeSeriesImputer, CryptoPreprocessor
 
 
 def lower_granularity(df, interval):
@@ -43,17 +44,27 @@ def lower_granularity(df, interval):
 
 # Exploring cryptocurrency data
 
+# # Load and index data
+# df = pd.read_csv('crypto_data/USD-2017-01-01.csv', index_col='time')
+# df.index = pd.to_datetime(df.index)
+#
+# first_valid_idx = max([df[col].first_valid_index() for col in df.columns])
+# last_valid_idx = min([df[col].last_valid_index() for col in df.columns])
+# df = df.loc[first_valid_idx:last_valid_idx, :]
+#
+# # Make new multi-index dataframe for average price
+# df_price = (df.loc[:, 'open'] + df.loc[:, 'close']) / 2
+#
+# # Add concatenate two dataframes
+# df = pd.concat([df, df_price], axis=1).sort_values(by=['category', 'coin'], axis=1)
+
 # Load and index data
 df = pd.read_csv('crypto_data/USD-2021-06-17-2021-09-12.csv', index_col=0, header=[0, 1])
 df.index = pd.to_datetime(df.index)
 
-first_valid_idx = max([df[col].first_valid_index() for col in df.columns])
-last_valid_idx = min([df[col].last_valid_index() for col in df.columns])
-df = df.loc[first_valid_idx:last_valid_idx, :]
+preprocessor = CryptoPreprocessor(splitXy=False, target_coin='ETH')
+df = preprocessor.fit_transform(df)
+df = df.loc[:, ['low', 'price', 'high']]
+plt.plot(df)
+plt.savefig('test.png')
 
-# Make new multi-index dataframe for average price
-df_price = (df.loc[:, 'open'] + df.loc[:, 'close']) / 2
-df_price.columns = pd.MultiIndex.from_tuples(list(zip(['price'] * df_price.shape[1], df_price.columns)))
-
-# Add concatenate two dataframes
-df = pd.concat([df, df_price], axis=1).sort_values(by=['category', 'coin'], axis=1)
