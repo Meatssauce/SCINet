@@ -34,24 +34,12 @@ def make_model(input_shape, output_shape):
 
 
 # Parametres
-# data_filepath = 'crypto_data/Crypto-USD-2019-09-01-00-00.csv'
-# y_col = 'ETH/close'
-# index_col = 'time'
-# degree_of_differencing = 0
-# look_back_window, horizon = 168, 3
-# batch_size = 64
-# learning_rate = 9e-3
-# h, kernel_size, L, K = 4, 5, 3, 1
-# l1, l2 = 0.001, 0.1
-# split_strides = look_back_window + horizon
-# # split_strides = 1
-
 data_filepath = 'ETDataset-main/ETT-small/ETTh1.csv'
 y_col = 'OT'
 index_col = 'date'
 degree_of_differencing = 0
 look_back_window, horizon = 48, 24
-batch_size = 4
+batch_size = 16
 learning_rate = 9e-3
 h, kernel_size, L, K = 4, 5, 3, 1
 l1, l2 = 0.001, 0.1
