@@ -34,7 +34,7 @@ def make_model(input_shape, output_shape):
 
 
 # Parametres
-data_filepath = 'ETDataset-main/ETT-small/ETTh1.csv'
+data_filepath = 'datasets/ETDataset-main/ETT-small/ETTh1.csv'
 y_col = 'OT'
 index_col = 'date'
 degree_of_differencing = 0
@@ -46,7 +46,7 @@ l1, l2 = 0.001, 0.1
 # split_strides = look_back_window + horizon
 split_strides = 1
 
-# data_filepath = 'solar_AL.csv'
+# data_filepath = 'datasets/solar_AL.csv'
 # y_col = None
 # index_col = None
 # degree_of_differencing = 0

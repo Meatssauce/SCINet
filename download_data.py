@@ -44,7 +44,7 @@ for coin_pair, granularity, start_date in parameters:
     except:
         pass
 
-with open('price_data', 'wb') as f:
+with open('crypto_data/price_data', 'wb') as f:
     dump(data, f)
 data = pd.concat(data, axis=1)
 
@@ -53,4 +53,4 @@ coins = [re.findall('^(\w+)/', col)[0] for col in data.columns]
 category = [re.findall(r'/(\w+)$', col)[0] for col in data.columns]
 data.columns = pd.MultiIndex.from_tuples(list(zip(category, coins)), names=['category', 'coin'])
 data = data.sort_values(by=['category', 'coin'], axis=1)
-data.to_csv('Crypto-USD-2017-01-01.csv')
+data.to_csv('crypto_data/Crypto-USD-2017-01-01.csv')
