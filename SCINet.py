@@ -30,6 +30,12 @@ class InnerConv1DBlock(tf.keras.layers.Layer):
 
 class SciBlock(tf.keras.layers.Layer):
     def __init__(self, features: int, kernel_size: int, h: int, **kwargs):
+        """
+        :param features: number of features in the output
+        :param kernel_size: kernel size of the convolutional layers
+        :param h: scaling factor for convolutional module
+        """
+
         super(SciBlock, self).__init__(**kwargs)
         self.features = features
         self.kernel_size = kernel_size
@@ -44,7 +50,7 @@ class SciBlock(tf.keras.layers.Layer):
     def call(self, inputs, training=None):
         F_odd, F_even = inputs[:, ::2], inputs[:, 1::2]
 
-        # Interactive learning
+        # Interactive learning as described in the paper
         F_s_odd = F_odd * tf.math.exp(self.conv1ds['phi'](F_even))
         F_s_even = F_even * tf.math.exp(self.conv1ds['psi'](F_odd))
 
@@ -55,6 +61,8 @@ class SciBlock(tf.keras.layers.Layer):
 
 
 class Interleave(tf.keras.layers.Layer):
+    """A layer used to reverse the even-odd split operation."""
+
     def __init__(self, **kwargs):
         super(Interleave, self).__init__(**kwargs)
 
@@ -69,7 +77,7 @@ class Interleave(tf.keras.layers.Layer):
         odd = self.interleave(slices[mid:])
 
         shape = tf.shape(even)
-        return tf.reshape(tf.stack([even, odd], axis=3), (shape[0], shape[1]*2, shape[2]))
+        return tf.reshape(tf.stack([even, odd], axis=3), (shape[0], shape[1] * 2, shape[2]))
 
     def call(self, inputs):
         return self.interleave(inputs)
@@ -78,6 +86,15 @@ class Interleave(tf.keras.layers.Layer):
 class SciNet(tf.keras.layers.Layer):
     def __init__(self, horizon: int, features: int, levels: int, h: int, kernel_size: int,
                  regularizer: Tuple[float, float] = (0, 0), **kwargs):
+        """
+        :param horizon: number of time stamps in output
+        :param features: number of features in output
+        :param levels: height of the binary tree + 1
+        :param h: scaling factor for convolutional module in each SciBlock
+        :param kernel_size: kernel size of convolutional module in each SciBlock
+        :param regularizer: activity regularization (not implemented)
+        """
+
         if levels < 1:
             raise ValueError('Must have at least 1 level')
         super(SciNet, self).__init__(**kwargs)
@@ -106,20 +123,20 @@ class SciNet(tf.keras.layers.Layer):
 
     def call(self, inputs, training=None):
         # cascade input down a binary tree of sci-blocks
-        lvl_inputs = [inputs]
+        lvl_inputs = [inputs]  # inputs for current level of the tree
         for i in range(self.levels):
             i_end = 2 ** (i + 1) - 1
             i_start = i_end - 2 ** i
-            lvl_outputs = [out for j, tensor in zip(range(i_start, i_end), lvl_inputs)
-                           for out in self.sciblocks[j](tensor)]
+            lvl_outputs = [output for j, tensor in zip(range(i_start, i_end), lvl_inputs)
+                           for output in self.sciblocks[j](tensor)]
             lvl_inputs = lvl_outputs
 
         x = self.interleave(lvl_outputs)
         x += inputs
 
         # not sure if this is the correct way of doing it. The paper merely said to use a fully connected layer to
-        # produce an output. Can't use TimeDistributed wrapper it would force the layer's timestamps to match that of
-        # the input.
+        # produce an output. Can't use TimeDistributed wrapper. It would force the layer's timestamps to match that of
+        # the input -- something SCINet is supposed to solve
         x = self.flatten(x)
         x = self.dense(x)
         x = tf.reshape(x, (-1, self.horizon, self.features))
@@ -134,10 +151,9 @@ class StackedSciNet(tf.keras.layers.Layer):
         :param horizon: number of time stamps in output
         :param stacks: number of stacked SciNets
         :param levels: number of levels for each SciNet
-        :param h: scaling factor for convolutional module
-        :param kernel_size: kernel size of convolutional module
-        :param regularizer: activity regularization
-        :param kwargs:
+        :param h: scaling factor for convolutional module in each SciBlock
+        :param kernel_size: kernel size of convolutional module in each SciBlock
+        :param regularizer: activity regularization (not implemented)
         """
 
         if stacks < 1:
