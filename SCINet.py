@@ -196,3 +196,6 @@ class StackedSciNet(tf.keras.layers.Layer):
                 self.add_loss(loss)
 
         return x
+
+    def get_config(self):
+        return super().get_config()
