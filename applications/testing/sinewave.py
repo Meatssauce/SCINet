@@ -4,7 +4,7 @@ import random
 from sklearn.model_selection import train_test_split
 from tensorflow.python.keras.callbacks import EarlyStopping
 
-from SCINet import StackedSciNet, SciNet, SciNetEndpoint
+from SCINet import StackedSCINet, SCINet, SCINetEndpoint
 import tensorflow as tf
 import math
 import pandas as pd
@@ -21,7 +21,7 @@ def make_model(input_shape, output_shape):
 
     inputs = tf.keras.Input(shape=(input_shape[1], input_shape[2]), name='inputs')
     targets = tf.keras.Input(shape=(output_shape[1], output_shape[2]), name='targets')
-    predictions = StackedSciNet(horizon=horizon, features=input_shape[-1], stacks=K, levels=L, h=h,
+    predictions = StackedSCINet(horizon=horizon, features=input_shape[-1], stacks=K, levels=L, h=h,
                                 kernel_size=kernel_size,
                                 regularizer=(l1, l2))(inputs, targets)
     # logits = SciNet(horizon, features=input_shape[-1], levels=L, h=h, kernel_size=kernel_size, name='logits')(inputs)

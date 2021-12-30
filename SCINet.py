@@ -28,24 +28,20 @@ class InnerConv1DBlock(tf.keras.layers.Layer):
         return x
 
 
-class SciBlock(tf.keras.layers.Layer):
+class SCIBlock(tf.keras.layers.Layer):
     def __init__(self, features: int, kernel_size: int, h: int, **kwargs):
         """
         :param features: number of features in the output
         :param kernel_size: kernel size of the convolutional layers
         :param h: scaling factor for convolutional module
         """
-
-        super(SciBlock, self).__init__(**kwargs)
+        super(SCIBlock, self).__init__(**kwargs)
         self.features = features
         self.kernel_size = kernel_size
         self.h = h
 
-    def build(self, input_shape):
         self.conv1ds = {k: InnerConv1DBlock(filters=self.features, h=self.h, kernel_size=self.kernel_size, name=k)
                         for k in ['psi', 'phi', 'eta', 'rho']}  # regularize?
-        super().build(input_shape)
-        # [layer.build(input_shape) for layer in self.conv1ds.values()]  # unneeded?
 
     def call(self, inputs, training=None):
         F_odd, F_even = inputs[:, ::2], inputs[:, 1::2]
@@ -66,24 +62,24 @@ class Interleave(tf.keras.layers.Layer):
     def __init__(self, **kwargs):
         super(Interleave, self).__init__(**kwargs)
 
-    def interleave(self, slices):
+    def _interleave(self, slices):
         if not slices:
             return slices
         elif len(slices) == 1:
             return slices[0]
 
         mid = len(slices) // 2
-        even = self.interleave(slices[:mid])
-        odd = self.interleave(slices[mid:])
+        even = self._interleave(slices[:mid])
+        odd = self._interleave(slices[mid:])
 
         shape = tf.shape(even)
         return tf.reshape(tf.stack([even, odd], axis=3), (shape[0], shape[1] * 2, shape[2]))
 
     def call(self, inputs):
-        return self.interleave(inputs)
+        return self._interleave(inputs)
 
 
-class SciNet(tf.keras.layers.Layer):
+class SCINet(tf.keras.layers.Layer):
     def __init__(self, horizon: int, features: int, levels: int, h: int, kernel_size: int,
                  regularizer: Tuple[float, float] = (0, 0), **kwargs):
         """
@@ -97,10 +93,14 @@ class SciNet(tf.keras.layers.Layer):
 
         if levels < 1:
             raise ValueError('Must have at least 1 level')
-        super(SciNet, self).__init__(**kwargs)
+        super(SCINet, self).__init__(**kwargs)
         self.horizon = horizon
         self.features = features
         self.levels = levels
+        self.h = h
+        self.kernel_size = kernel_size
+        self.regularizer = regularizer
+
         self.interleave = Interleave()
         self.flatten = tf.keras.layers.Flatten()
         self.dense = tf.keras.layers.Dense(
@@ -111,7 +111,7 @@ class SciNet(tf.keras.layers.Layer):
         # self.regularizer = tf.keras.layers.ActivityRegularization(l1=regularizer[0], l2=regularizer[1])
 
         # tree of sciblocks
-        self.sciblocks = [SciBlock(features=features, kernel_size=kernel_size, h=h)
+        self.sciblocks = [SCIBlock(features=features, kernel_size=kernel_size, h=h)
                           for _ in range(2 ** levels - 1)]
 
     def build(self, input_shape):
@@ -119,7 +119,6 @@ class SciNet(tf.keras.layers.Layer):
             raise ValueError(f'timestamps {input_shape[1]} must be evenly divisible by a tree with '
                              f'{self.levels} levels')
         super().build(input_shape)
-        # [layer.build(input_shape) for layer in self.sciblocks]  # input_shape
 
     def call(self, inputs, training=None):
         # cascade input down a binary tree of sci-blocks
@@ -143,8 +142,14 @@ class SciNet(tf.keras.layers.Layer):
 
         return x
 
+    def get_config(self):
+        config = super().get_config()
+        config.update({'horizon': self.horizon, 'features': self.features, 'levels': self.levels,
+                       'kernel_size': self.kernel_size, 'h': self.h, 'regularizer': self.regularizer})
+        return config
 
-class StackedSciNet(tf.keras.layers.Layer):
+
+class StackedSCINet(tf.keras.layers.Layer):
     def __init__(self, horizon: int, features: int, stacks: int, levels: int, h: int, kernel_size: int,
                  regularizer: Tuple[float, float] = (0, 0), **kwargs):
         """
@@ -155,47 +160,72 @@ class StackedSciNet(tf.keras.layers.Layer):
         :param kernel_size: kernel size of convolutional module in each SciBlock
         :param regularizer: activity regularization (not implemented)
         """
-
         if stacks < 1:
             raise ValueError('Must have at least 1 stack')
-        super(StackedSciNet, self).__init__(**kwargs)
+        super(StackedSCINet, self).__init__(**kwargs)
+
         self.horizon = horizon
-        self.scinets = [SciNet(horizon=horizon, features=features, levels=levels, h=h, kernel_size=kernel_size,
+        self.features = features
+        self.levels = levels
+        self.h = h
+        self.kernel_size = kernel_size
+        self.regularizer = regularizer
+
+        self.scinets = [SCINet(horizon=horizon, features=features, levels=levels, h=h, kernel_size=kernel_size,
                                regularizer=regularizer) for _ in range(stacks)]
         self.mse_fn = tf.keras.metrics.MeanSquaredError()
         self.mae_fn = tf.keras.metrics.MeanAbsoluteError()
 
-    # def build(self, input_shape):
-    #     super().build(input_shape)
-    #     [stack.build(input_shape) for stack in self.scinets]
-
-    def call(self, inputs, targets=None, sample_weights=None, training=None):
+    def call(self, inputs, targets, sample_weights=None, training=None):
         outputs = []
         for scinet in self.scinets:
             x = scinet(inputs)
             outputs.append(x)  # keep each stack's output for intermediate supervision
-            inputs = tf.concat([x, inputs[:, x.shape[1]:, :]], axis=1)
+            inputs = tf.concat([x, inputs[:, x.shape[1]:, :]], axis=1)  # X_hat_k concat X_(t-(T-tilda)+1:t)
 
         if targets is not None:
             # Calculate metrics
             mse = self.mse_fn(targets, x, sample_weights)
             mae = self.mae_fn(targets, x, sample_weights)
-            self.add_metric(mse, name='mean_squared_error')
-            self.add_metric(mae, name='mean_absolute_error')
+            self.add_metric(mse)
+            self.add_metric(mae)
 
-            if training:
-                # Calculate loss as sum of mean of norms of differences between output and input feature vectors for
-                # each stack
-                stacked_outputs = tf.stack(outputs)
-                differences = stacked_outputs - targets
-                loss = tf.linalg.normalize(differences, axis=1)[1]
-                loss = tf.reshape(loss, (-1, self.horizon))
-                loss = tf.reduce_sum(loss, 1)
-                loss = loss / self.horizon
-                loss = tf.reduce_sum(loss)
-                self.add_loss(loss)
+            # Calculate loss as sum of mean of norms of differences between output and input feature vectors for
+            # each stack
+            stacked_outputs = tf.stack(outputs)
+            differences = stacked_outputs - targets
+            loss = tf.linalg.normalize(differences, axis=3)[1]
+            loss = tf.reduce_sum(loss, 2)
+            loss /= self.horizon
+            loss = tf.reduce_sum(loss)
+            self.add_loss(loss)
 
         return x
 
     def get_config(self):
-        return super().get_config()
+        config = super().get_config()
+        config.update({'horizon': self.horizon, 'features': self.features, 'stacks': len(self.scinets),
+                       'levels': self.levels, 'h': self.h, 'kernel_size': self.kernel_size,
+                       'regularizer': self.regularizer})
+        return config
+
+
+class SCINetEndpoint(tf.keras.layers.Layer):
+    def __init__(self, name=None):
+        super(SCINetEndpoint, self).__init__(name=name)
+        self.loss_fn = tf.keras.losses.MeanSquaredError()
+        self.accuracy_fn = tf.keras.metrics.MeanSquaredError()
+
+    def call(self, targets, logits, sample_weights=None):
+        # Compute the training-time loss value and add it
+        # to the layer using `self.add_loss()`.
+        loss = self.loss_fn(targets, logits, sample_weights)
+        self.add_loss(loss)
+
+        # Log accuracy as a metric and add it
+        # to the layer using `self.add_metric()`.
+        acc = self.accuracy_fn(targets, logits, sample_weights)
+        self.add_metric(acc, name="mean_squared_error")
+
+        # Return the inference-time prediction tensor (for `.predict()`).
+        return logits

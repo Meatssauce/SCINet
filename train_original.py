@@ -11,7 +11,7 @@ from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.metrics import RootMeanSquaredError, MeanAbsoluteError
 
 from preprocessing import TimeSeriesPreprocessor
-from SCINet import SciNet, StackedSciNet
+from SCINet import SCINet, StackedSCINet
 
 
 # Make model
@@ -20,7 +20,7 @@ def make_model(input_shape, output_shape):
     # x = SciNet(horizon, levels=L, h=h, kernel_size=kernel_size)(inputs)
     # model = tf.keras.Model(inputs, x)
     targets = tf.keras.Input(shape=(output_shape[1], output_shape[2]), name='targets')
-    predictions = StackedSciNet(horizon=horizon, features=input_shape[-1], stacks=K, levels=L, h=h,
+    predictions = StackedSCINet(horizon=horizon, features=input_shape[-1], stacks=K, levels=L, h=h,
                                 kernel_size=kernel_size,
                                 regularizer=(l1, l2))(inputs, targets)
     model = tf.keras.Model(inputs=[inputs, targets], outputs=predictions)
