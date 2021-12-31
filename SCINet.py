@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Tuple, List
 import tensorflow as tf
 from tensorflow.keras.regularizers import L1L2
 
@@ -150,6 +150,14 @@ class SCINet(tf.keras.layers.Layer):
 
 
 class StackedSCINet(tf.keras.layers.Layer):
+    """Layer that implements StackedSCINet as described in the paper.
+
+    When called, outputs a tensor of shape (K, -1, n_steps, n_features) containing the outputs of all K internal
+    SCINets (e.g., output[k-1] is the output of the kth SCINet, where k is in [1, ..., K]).
+
+    To use intermediate supervision, pass the layer's output to StackedSCINetLoss as a separate model output.
+    """
+
     def __init__(self, horizon: int, features: int, stacks: int, levels: int, h: int, kernel_size: int,
                  regularizer: Tuple[float, float] = (0, 0), **kwargs):
         """
@@ -173,34 +181,14 @@ class StackedSCINet(tf.keras.layers.Layer):
 
         self.scinets = [SCINet(horizon=horizon, features=features, levels=levels, h=h, kernel_size=kernel_size,
                                regularizer=regularizer) for _ in range(stacks)]
-        self.mse_fn = tf.keras.metrics.MeanSquaredError()
-        self.mae_fn = tf.keras.metrics.MeanAbsoluteError()
 
-    def call(self, inputs, targets, sample_weights=None, training=None):
+    def call(self, inputs, sample_weights=None, training=None):
         outputs = []
         for scinet in self.scinets:
             x = scinet(inputs)
             outputs.append(x)  # keep each stack's output for intermediate supervision
             inputs = tf.concat([x, inputs[:, x.shape[1]:, :]], axis=1)  # X_hat_k concat X_(t-(T-tilda)+1:t)
-
-        if targets is not None:
-            # Calculate metrics
-            mse = self.mse_fn(targets, x, sample_weights)
-            mae = self.mae_fn(targets, x, sample_weights)
-            self.add_metric(mse)
-            self.add_metric(mae)
-
-            # Calculate loss as sum of mean of norms of differences between output and input feature vectors for
-            # each stack
-            stacked_outputs = tf.stack(outputs)
-            differences = stacked_outputs - targets
-            loss = tf.linalg.normalize(differences, axis=3)[1]
-            loss = tf.reduce_sum(loss, 2)
-            loss /= self.horizon
-            loss = tf.reduce_sum(loss)
-            self.add_loss(loss)
-
-        return x
+        return tf.stack(outputs)
 
     def get_config(self):
         config = super().get_config()
@@ -210,22 +198,48 @@ class StackedSCINet(tf.keras.layers.Layer):
         return config
 
 
-class SCINetEndpoint(tf.keras.layers.Layer):
-    def __init__(self, name=None):
-        super(SCINetEndpoint, self).__init__(name=name)
-        self.loss_fn = tf.keras.losses.MeanSquaredError()
-        self.accuracy_fn = tf.keras.metrics.MeanSquaredError()
+class Identity(tf.keras.layers.Layer):
+    """Identity layer used solely for the purpose of naming model outputs and properly displaying outputs when plotting
+    some multi-output models.
 
-    def call(self, targets, logits, sample_weights=None):
-        # Compute the training-time loss value and add it
-        # to the layer using `self.add_loss()`.
-        loss = self.loss_fn(targets, logits, sample_weights)
-        self.add_loss(loss)
+    Returns input without changing them.
+    """
 
-        # Log accuracy as a metric and add it
-        # to the layer using `self.add_metric()`.
-        acc = self.accuracy_fn(targets, logits, sample_weights)
-        self.add_metric(acc, name="mean_squared_error")
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
 
-        # Return the inference-time prediction tensor (for `.predict()`).
-        return logits
+    def call(self, inputs, sample_weights=None):
+        return tf.identity(inputs)
+
+
+class StackedSCINetLoss(tf.keras.losses.Loss):
+    """Compute loss for a Stacked SCINet via intermediate supervision.
+
+    `loss = sum of mean normalised difference between each stack's output and ground truth`
+
+    `y_pred` should be the output of a StackedSCINet layer.
+    """
+
+    def __init__(self, name='stacked_scienet_loss', **kwargs):
+        super().__init__(name=name, **kwargs)
+
+    def call(self, y_true, y_pred, sample_weights=None):
+        stacked_outputs = y_pred
+        horizon = stacked_outputs.shape[2]
+
+        errors = stacked_outputs - y_true
+        loss = tf.linalg.normalize(errors, axis=3)[1]
+        loss = tf.reduce_sum(loss, 2)
+        loss /= horizon
+        loss = tf.reduce_sum(loss)
+
+        return loss
+
+
+# class NetConcatenate(tf.keras.layer.Layer):
+#     def __init__(self, **kwargs):
+#         super().__init__(**kwargs)
+#         self.concatenate = tf.keras.layers.Concatenate(axis=1)
+#
+#     def call(self, intermediates, inputs):
+#         return self.concatenate([intermediates, inputs[:, intermediates.shape[1]:, :]])
