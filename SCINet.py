@@ -1,6 +1,4 @@
-from typing import Tuple, List
 import tensorflow as tf
-from tensorflow.keras.regularizers import L1L2
 
 
 class InnerConv1DBlock(tf.keras.layers.Layer):
@@ -31,13 +29,13 @@ class InnerConv1DBlock(tf.keras.layers.Layer):
 
 
 class SCIBlock(tf.keras.layers.Layer):
-    def __init__(self, features: int, kernel_size: int, h: int, **kwargs):
+    def __init__(self, features: int, kernel_size: int, h: int, name='sciblock', **kwargs):
         """
         :param features: number of features in the output
         :param kernel_size: kernel size of the convolutional layers
         :param h: scaling factor for convolutional module
         """
-        super(SCIBlock, self).__init__(**kwargs)
+        super(SCIBlock, self).__init__(name=name, **kwargs)
         self.features = features
         self.kernel_size = kernel_size
         self.h = h
@@ -88,37 +86,36 @@ class Interleave(tf.keras.layers.Layer):
 
 class SCINet(tf.keras.layers.Layer):
     def __init__(self, horizon: int, features: int, levels: int, h: int, kernel_size: int,
-                 regularizer: Tuple[float, float] = (0, 0), **kwargs):
+                 kernel_regularizer=None, activity_regularizer=None, name='scinet', **kwargs):
         """
         :param horizon: number of time stamps in output
         :param levels: height of the binary tree + 1
-        :param h: scaling factor for convolutional module in each SciBlock
-        :param kernel_size: kernel size of convolutional module in each SciBlock
-        :param regularizer: activity regularization (not implemented)
+        :param h: scaling factor for convolutional module in each SCIBlock
+        :param kernel_size: kernel size of convolutional module in each SCIBlock
+        :param kernel_regularizer: kernel regularizer for the fully connected layer at the end
+        :param activity_regularizer: activity regularizer for the fully connected layer at the end
         """
         if levels < 1:
             raise ValueError('Must have at least 1 level')
 
-        super(SCINet, self).__init__(**kwargs)
+        super(SCINet, self).__init__(name=name, **kwargs)
         self.horizon = horizon
         self.features = features
         self.levels = levels
         self.h = h
         self.kernel_size = kernel_size
-        self.regularizer = regularizer
 
         self.interleave = Interleave()
         self.flatten = tf.keras.layers.Flatten()
-        # self.regularizer = tf.keras.layers.ActivityRegularization(l1=regularizer[0], l2=regularizer[1])
 
-        self.dense = tf.keras.layers.Dense(
-            self.horizon * features,
-            kernel_regularizer=L1L2(0.001, 0.01),
-            # activity_regularizer=L1L2(0.001, 0.01)
-        )
         # tree of sciblocks
         self.sciblocks = [SCIBlock(features=features, kernel_size=self.kernel_size, h=self.h)
                           for _ in range(2 ** self.levels - 1)]
+        self.dense = tf.keras.layers.Dense(
+            self.horizon * features,
+            kernel_regularizer=kernel_regularizer,
+            activity_regularizer=activity_regularizer
+        )
 
     def build(self, input_shape):
         if input_shape[1] / 2 ** self.levels % 1 != 0:
@@ -150,7 +147,7 @@ class SCINet(tf.keras.layers.Layer):
 
     def get_config(self):
         config = super().get_config()
-        config.update({'horizon': self.horizon, 'levels': self.levels, 'regularizer': self.regularizer})
+        config.update({'horizon': self.horizon, 'levels': self.levels})
         return config
 
 
@@ -164,22 +161,24 @@ class StackedSCINet(tf.keras.layers.Layer):
     """
 
     def __init__(self, horizon: int, features: int, stacks: int, levels: int, h: int, kernel_size: int,
-                 regularizer: Tuple[float, float] = (0, 0), **kwargs):
+                 kernel_regularizer=None, activity_regularizer=None, name='stacked_scinet', **kwargs):
         """
         :param horizon: number of time stamps in output
-        :param stacks: number of stacked SciNets
-        :param levels: number of levels for each SciNet
-        :param h: scaling factor for convolutional module in each SciBlock
-        :param kernel_size: kernel size of convolutional module in each SciBlock
-        :param regularizer: activity regularization (not implemented)
+        :param stacks: number of stacked SCINets
+        :param levels: number of levels for each SCINet
+        :param h: scaling factor for convolutional module in each SCIBlock
+        :param kernel_size: kernel size of convolutional module in each SCIBlock
+        :param kernel_regularizer: kernel regularizer for each SCINet
+        :param activity_regularizer: activity regularizer for each SCINet
         """
         if stacks < 2:
             raise ValueError('Must have at least 2 stacks')
 
-        super(StackedSCINet, self).__init__(**kwargs)
+        super(StackedSCINet, self).__init__(name=name, **kwargs)
         self.stacks = stacks
         self.scinets = [SCINet(horizon=horizon, features=features, levels=levels, h=h,
-                               kernel_size=kernel_size, regularizer=regularizer) for _ in range(stacks)]
+                               kernel_size=kernel_size, kernel_regularizer=kernel_regularizer,
+                               activity_regularizer=activity_regularizer) for _ in range(stacks)]
 
     def call(self, inputs, sample_weights=None, training=None):
         outputs = []

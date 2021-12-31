@@ -2,6 +2,7 @@ import os
 from datetime import datetime
 from sklearn.model_selection import train_test_split
 from tensorflow.python.keras.callbacks import EarlyStopping
+from tensorflow.python.keras.regularizers import L1L2
 
 from SCINet import StackedSCINet, SCINet, StackedSCINetLoss, Identity
 import tensorflow as tf
@@ -18,10 +19,10 @@ def make_model(input_shape):
     #     SCINet(horizon, features=input_shape[-1], levels=L, h=h, kernel_size=kernel_size)
     # ])
 
-    # Model with StackedSCINEt
+    # Model with StackedSCINet
     inputs = tf.keras.Input(shape=(input_shape[1], input_shape[2]), name='lookback_window')
     x = StackedSCINet(horizon=horizon, features=input_shape[-1], stacks=K, levels=L, h=h,
-                      kernel_size=kernel_size, regularizer=(l1, l2))(inputs)
+                      kernel_size=kernel_size, kernel_regularizer=L1L2(0.001, 0.01))(inputs)
     outputs = Identity(name='outputs')(x[-1])
     intermediates = Identity(name='intermediates')(x)
     model = tf.keras.Model(inputs=inputs, outputs=[outputs, intermediates])
