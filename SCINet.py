@@ -173,8 +173,8 @@ class StackedSCINet(tf.keras.layers.Layer):
         :param kernel_size: kernel size of convolutional module in each SciBlock
         :param regularizer: activity regularization (not implemented)
         """
-        if stacks < 1:
-            raise ValueError('Must have at least 1 stack')
+        if stacks < 2:
+            raise ValueError('Must have at least 2 stacks')
 
         super(StackedSCINet, self).__init__(**kwargs)
         self.stacks = stacks
