@@ -4,9 +4,11 @@ from tensorflow.keras.regularizers import L1L2
 
 
 class InnerConv1DBlock(tf.keras.layers.Layer):
-    def __init__(self, filters: int, h: float, kernel_size: int, neg_slope: float = .01, dropout: float = .5, **kwargs):
+    def __init__(self, filters: int, h: float, kernel_size: int, neg_slope: float = .01, dropout: float = .5,
+                 **kwargs):
         if filters <= 0 or h <= 0:
             raise ValueError('filters and h must be positive')
+
         super(InnerConv1DBlock, self).__init__(**kwargs)
         self.conv1d = tf.keras.layers.Conv1D(max(round(h * filters), 1), kernel_size, padding='same')
         self.leakyrelu = tf.keras.layers.LeakyReLU(neg_slope)
@@ -55,6 +57,11 @@ class SCIBlock(tf.keras.layers.Layer):
 
         return F_prime_odd, F_prime_even
 
+    def get_config(self):
+        config = super().get_config()
+        config.update({'features': self.features, 'kernel_size': self.kernel_size, 'h': self.h})
+        return config
+
 
 class Interleave(tf.keras.layers.Layer):
     """A layer used to reverse the even-odd split operation."""
@@ -84,15 +91,14 @@ class SCINet(tf.keras.layers.Layer):
                  regularizer: Tuple[float, float] = (0, 0), **kwargs):
         """
         :param horizon: number of time stamps in output
-        :param features: number of features in output
         :param levels: height of the binary tree + 1
         :param h: scaling factor for convolutional module in each SciBlock
         :param kernel_size: kernel size of convolutional module in each SciBlock
         :param regularizer: activity regularization (not implemented)
         """
-
         if levels < 1:
             raise ValueError('Must have at least 1 level')
+
         super(SCINet, self).__init__(**kwargs)
         self.horizon = horizon
         self.features = features
@@ -103,16 +109,16 @@ class SCINet(tf.keras.layers.Layer):
 
         self.interleave = Interleave()
         self.flatten = tf.keras.layers.Flatten()
+        # self.regularizer = tf.keras.layers.ActivityRegularization(l1=regularizer[0], l2=regularizer[1])
+
         self.dense = tf.keras.layers.Dense(
-            horizon * features,
+            self.horizon * features,
             kernel_regularizer=L1L2(0.001, 0.01),
             # activity_regularizer=L1L2(0.001, 0.01)
         )
-        # self.regularizer = tf.keras.layers.ActivityRegularization(l1=regularizer[0], l2=regularizer[1])
-
         # tree of sciblocks
-        self.sciblocks = [SCIBlock(features=features, kernel_size=kernel_size, h=h)
-                          for _ in range(2 ** levels - 1)]
+        self.sciblocks = [SCIBlock(features=features, kernel_size=self.kernel_size, h=self.h)
+                          for _ in range(2 ** self.levels - 1)]
 
     def build(self, input_shape):
         if input_shape[1] / 2 ** self.levels % 1 != 0:
@@ -144,8 +150,7 @@ class SCINet(tf.keras.layers.Layer):
 
     def get_config(self):
         config = super().get_config()
-        config.update({'horizon': self.horizon, 'features': self.features, 'levels': self.levels,
-                       'kernel_size': self.kernel_size, 'h': self.h, 'regularizer': self.regularizer})
+        config.update({'horizon': self.horizon, 'levels': self.levels, 'regularizer': self.regularizer})
         return config
 
 
@@ -170,17 +175,11 @@ class StackedSCINet(tf.keras.layers.Layer):
         """
         if stacks < 1:
             raise ValueError('Must have at least 1 stack')
+
         super(StackedSCINet, self).__init__(**kwargs)
-
-        self.horizon = horizon
-        self.features = features
-        self.levels = levels
-        self.h = h
-        self.kernel_size = kernel_size
-        self.regularizer = regularizer
-
-        self.scinets = [SCINet(horizon=horizon, features=features, levels=levels, h=h, kernel_size=kernel_size,
-                               regularizer=regularizer) for _ in range(stacks)]
+        self.stacks = stacks
+        self.scinets = [SCINet(horizon=horizon, features=features, levels=levels, h=h,
+                               kernel_size=kernel_size, regularizer=regularizer) for _ in range(stacks)]
 
     def call(self, inputs, sample_weights=None, training=None):
         outputs = []
@@ -192,9 +191,7 @@ class StackedSCINet(tf.keras.layers.Layer):
 
     def get_config(self):
         config = super().get_config()
-        config.update({'horizon': self.horizon, 'features': self.features, 'stacks': len(self.scinets),
-                       'levels': self.levels, 'h': self.h, 'kernel_size': self.kernel_size,
-                       'regularizer': self.regularizer})
+        config.update({'stacks': self.stacks})
         return config
 
 
