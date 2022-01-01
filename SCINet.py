@@ -7,7 +7,7 @@ class InnerConv1DBlock(tf.keras.layers.Layer):
         if filters <= 0 or h <= 0:
             raise ValueError('filters and h must be positive')
 
-        super(InnerConv1DBlock, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.conv1d = tf.keras.layers.Conv1D(max(round(h * filters), 1), kernel_size, padding='same')
         self.leakyrelu = tf.keras.layers.LeakyReLU(neg_slope)
 
@@ -35,7 +35,7 @@ class SCIBlock(tf.keras.layers.Layer):
         :param kernel_size: kernel size of the convolutional layers
         :param h: scaling factor for convolutional module
         """
-        super(SCIBlock, self).__init__(name=name, **kwargs)
+        super().__init__(name=name, **kwargs)
         self.features = features
         self.kernel_size = kernel_size
         self.h = h
@@ -43,7 +43,7 @@ class SCIBlock(tf.keras.layers.Layer):
         self.conv1ds = {k: InnerConv1DBlock(filters=self.features, h=self.h, kernel_size=self.kernel_size, name=k)
                         for k in ['psi', 'phi', 'eta', 'rho']}  # regularize?
 
-    def call(self, inputs, training=None):
+    def call(self, inputs):
         F_odd, F_even = inputs[:, ::2], inputs[:, 1::2]
 
         # Interactive learning as described in the paper
@@ -65,7 +65,7 @@ class Interleave(tf.keras.layers.Layer):
     """A layer used to reverse the even-odd split operation."""
 
     def __init__(self, **kwargs):
-        super(Interleave, self).__init__(**kwargs)
+        super().__init__(**kwargs)
 
     def _interleave(self, slices):
         if not slices:
@@ -98,7 +98,7 @@ class SCINet(tf.keras.layers.Layer):
         if levels < 1:
             raise ValueError('Must have at least 1 level')
 
-        super(SCINet, self).__init__(name=name, **kwargs)
+        super().__init__(name=name, **kwargs)
         self.horizon = horizon
         self.features = features
         self.levels = levels
@@ -123,7 +123,7 @@ class SCINet(tf.keras.layers.Layer):
                              f'{self.levels} levels')
         super().build(input_shape)
 
-    def call(self, inputs, training=None):
+    def call(self, inputs):
         # cascade input down a binary tree of sci-blocks
         lvl_inputs = [inputs]  # inputs for current level of the tree
         for i in range(self.levels):
@@ -174,13 +174,13 @@ class StackedSCINet(tf.keras.layers.Layer):
         if stacks < 2:
             raise ValueError('Must have at least 2 stacks')
 
-        super(StackedSCINet, self).__init__(name=name, **kwargs)
+        super().__init__(name=name, **kwargs)
         self.stacks = stacks
         self.scinets = [SCINet(horizon=horizon, features=features, levels=levels, h=h,
                                kernel_size=kernel_size, kernel_regularizer=kernel_regularizer,
                                activity_regularizer=activity_regularizer) for _ in range(stacks)]
 
-    def call(self, inputs, sample_weights=None, training=None):
+    def call(self, inputs):  # sample_weights=None
         outputs = []
         for scinet in self.scinets:
             x = scinet(inputs)
@@ -204,7 +204,7 @@ class Identity(tf.keras.layers.Layer):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-    def call(self, inputs, sample_weights=None):
+    def call(self, inputs):
         return tf.identity(inputs)
 
 
@@ -219,7 +219,7 @@ class StackedSCINetLoss(tf.keras.losses.Loss):
     def __init__(self, name='stacked_scienet_loss', **kwargs):
         super().__init__(name=name, **kwargs)
 
-    def call(self, y_true, y_pred, sample_weights=None):
+    def call(self, y_true, y_pred):
         stacked_outputs = y_pred
         horizon = stacked_outputs.shape[2]
 
@@ -239,3 +239,55 @@ class StackedSCINetLoss(tf.keras.losses.Loss):
 #
 #     def call(self, intermediates, inputs):
 #         return self.concatenate([intermediates, inputs[:, intermediates.shape[1]:, :]])
+
+
+def make_simple_scinet(input_shape, horizon: int, L: int, h: int, kernel_size: int, learning_rate: float,
+                       kernel_regularizer=None, activity_regularizer=None, diagram_path=None):
+    """Compiles a simple SCINet and saves model diagram if given a path.
+
+    Intended to be a demonstration of simple model construction. See paper for details on the hyperparameters.
+    """
+    model = tf.keras.Sequential([
+        tf.keras.Input(shape=(input_shape[1], input_shape[2]), name='inputs'),
+        SCINet(horizon, features=input_shape[-1], levels=L, h=h, kernel_size=kernel_size,
+               kernel_regularizer=kernel_regularizer, activity_regularizer=activity_regularizer)
+    ])
+
+    model.summary()
+    if diagram_path:
+        tf.keras.utils.plot_model(model, to_file=diagram_path, show_shapes=True)
+    model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate),
+                  loss='mse',
+                  metrics=['mse', 'mae']
+                  )
+
+    return model
+
+
+def make_simple_stacked_scinet(input_shape, horizon: int, K: int, L: int, h: int, kernel_size: int,
+                               learning_rate: float, kernel_regularizer=None, activity_regularizer=None,
+                               diagram_path=None):
+    """Compiles a simple StackedSCINet and saves model diagram if given a path.
+
+    Intended to be a demonstration of simple model construction. See paper for details on the hyperparameters.
+    """
+    inputs = tf.keras.Input(shape=(input_shape[1], input_shape[2]), name='lookback_window')
+    x = StackedSCINet(horizon=horizon, features=input_shape[-1], stacks=K, levels=L, h=h,
+                      kernel_size=kernel_size, kernel_regularizer=kernel_regularizer,
+                      activity_regularizer=activity_regularizer)(inputs)
+    outputs = Identity(name='outputs')(x[-1])
+    intermediates = Identity(name='intermediates')(x)
+    model = tf.keras.Model(inputs=inputs, outputs=[outputs, intermediates])
+
+    model.summary()
+    if diagram_path:
+        tf.keras.utils.plot_model(model, to_file=diagram_path, show_shapes=True)
+    model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate),
+                  loss={
+                      # 'outputs': 'mse',
+                      'intermediates': StackedSCINetLoss()
+                  },
+                  metrics={'outputs': ['mse', 'mae']}
+                  )
+
+    return model
