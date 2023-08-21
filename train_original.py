@@ -26,7 +26,7 @@ def make_model(input_shape, output_shape):
     model = tf.keras.Model(inputs=[inputs, targets], outputs=predictions)
 
     model.summary()
-    tf.keras.utils.plot_model(model, to_file='modelDiagram.png', show_shapes=True)
+    # tf.keras.utils.plot_model(model, to_file='modelDiagram.png', show_shapes=True)
 
     model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate), loss='mse',
                   metrics=['mean_squared_error', 'mean_absolute_error'])
@@ -41,7 +41,7 @@ degree_of_differencing = 0
 look_back_window, horizon = 48, 24
 batch_size = 16
 learning_rate = 9e-3
-h, kernel_size, L, K = 4, 5, 3, 1
+h, kernel_size, L, K = 4, 5, 3, 2
 l1, l2 = 0.001, 0.1
 # split_strides = look_back_window + horizon
 split_strides = 1
@@ -77,7 +77,8 @@ if __name__ == '__main__':
     model = make_model(X_train.shape, y_train.shape)
     early_stopping = EarlyStopping(monitor='val_loss', patience=50, min_delta=0, verbose=1, restore_best_weights=True)
     history = model.fit({'inputs': X_train, 'targets': y_train},
-                        validation_data={'inputs': X_val, 'targets': y_val},
+                        y_train,
+                        validation_data=({'inputs': X_val, 'targets': y_val}, y_val),
                         batch_size=batch_size, epochs=800, callbacks=[early_stopping])
 
     # Generate new id and create save directory
