@@ -180,14 +180,17 @@ class StackedSCINet(tf.keras.layers.Layer):
         self.stacks = stacks
         self.scinets = [SCINet(horizon=horizon, features=features, levels=levels, h=h,
                                kernel_size=kernel_size, regularizer=regularizer) for _ in range(stacks)]
+        self.outputs = []
 
     def call(self, inputs, sample_weights=None, training=None):
-        outputs = []
+        self.outputs = []
+        x = None
         for scinet in self.scinets:
             x = scinet(inputs)
-            outputs.append(x)  # keep each stack's output for intermediate supervision
+            if training:
+                self.outputs.append(x)  # keep each stack's output for intermediate supervision
             inputs = tf.concat([x, inputs[:, x.shape[1]:, :]], axis=1)  # X_hat_k concat X_(t-(T-tilda)+1:t)
-        return tf.stack(outputs)
+        return x
 
     def get_config(self):
         config = super().get_config()
