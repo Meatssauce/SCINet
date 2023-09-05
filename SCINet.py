@@ -174,9 +174,6 @@ class StackedSCINet(tf.keras.layers.Layer):
         :param kernel_size: kernel size of convolutional module in each SciBlock
         :param regularizer: activity regularization (not implemented)
         """
-        if stacks < 2:
-            raise ValueError('Must have at least 2 stacks')
-
         super(StackedSCINet, self).__init__(**kwargs)
         self.stacks = stacks
         self.scinets = [SCINet(horizon=horizon, features=features, levels=levels, h=h,
@@ -186,12 +183,16 @@ class StackedSCINet(tf.keras.layers.Layer):
 
     def call(self, inputs, sample_weights=None, training=None):
         self.outputs = []
-        x = None
-        for scinet in self.scinets:
+
+        x = self.scinets[0](inputs)
+        if training:
+            self.outputs.append(x)  # keep each stack's output for intermediate supervision
+
+        for scinet in self.scinets[1:]:
+            inputs = tf.concat([x, inputs[:, x.shape[1]:, :]], axis=1)  # X_hat_k concat X_(t-(T-tilda)+1:t)
             x = scinet(inputs)
             if training:
-                self.outputs.append(x)  # keep each stack's output for intermediate supervision
-            inputs = tf.concat([x, inputs[:, x.shape[1]:, :]], axis=1)  # X_hat_k concat X_(t-(T-tilda)+1:t)
+                self.outputs.append(x)
         return x
 
     def get_config(self):
