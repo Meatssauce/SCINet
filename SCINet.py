@@ -31,7 +31,7 @@ class InnerConv1DBlock(tf.keras.layers.Layer):
 
 
 class SCIBlock(tf.keras.layers.Layer):
-    def __init__(self, features: int, kernel_size: int, h: int, **kwargs):
+    def __init__(self, features: int, kernel_size: int, h: int, dropout: float, **kwargs):
         """
         :param features: number of features in the output
         :param kernel_size: kernel size of the convolutional layers
@@ -42,7 +42,8 @@ class SCIBlock(tf.keras.layers.Layer):
         self.kernel_size = kernel_size
         self.h = h
 
-        self.conv1ds = {k: InnerConv1DBlock(filters=self.features, h=self.h, kernel_size=self.kernel_size, name=k)
+        self.conv1ds = {k: InnerConv1DBlock(filters=self.features, h=self.h, kernel_size=self.kernel_size,
+                                            dropout=dropout, name=k)
                         for k in ['psi', 'phi', 'eta', 'rho']}  # regularize?
 
     def call(self, inputs, training=None):
@@ -88,7 +89,7 @@ class Interleave(tf.keras.layers.Layer):
 
 class SCINet(tf.keras.layers.Layer):
     def __init__(self, horizon: int, features: int, levels: int, h: int, kernel_size: int,
-                 regularizer: Tuple[float, float] = (0, 0), **kwargs):
+                 regularizer: Tuple[float, float] = (0, 0), dropout: float = 0.5, **kwargs):
         """
         :param horizon: number of time stamps in output
         :param levels: height of the binary tree + 1
@@ -117,7 +118,7 @@ class SCINet(tf.keras.layers.Layer):
             # activity_regularizer=L1L2(0.001, 0.01)
         )
         # tree of sciblocks
-        self.sciblocks = [SCIBlock(features=features, kernel_size=self.kernel_size, h=self.h)
+        self.sciblocks = [SCIBlock(features=features, kernel_size=self.kernel_size, h=self.h, dropout=dropout)
                           for _ in range(2 ** self.levels - 1)]
 
     def build(self, input_shape):
@@ -164,7 +165,7 @@ class StackedSCINet(tf.keras.layers.Layer):
     """
 
     def __init__(self, horizon: int, features: int, stacks: int, levels: int, h: int, kernel_size: int,
-                 regularizer: Tuple[float, float] = (0, 0), **kwargs):
+                 regularizer: Tuple[float, float] = (0, 0), dropout: float = 0.5, **kwargs):
         """
         :param horizon: number of time stamps in output
         :param stacks: number of stacked SciNets
@@ -179,7 +180,8 @@ class StackedSCINet(tf.keras.layers.Layer):
         super(StackedSCINet, self).__init__(**kwargs)
         self.stacks = stacks
         self.scinets = [SCINet(horizon=horizon, features=features, levels=levels, h=h,
-                               kernel_size=kernel_size, regularizer=regularizer) for _ in range(stacks)]
+                               kernel_size=kernel_size, regularizer=regularizer, dropout=dropout)
+                        for _ in range(stacks)]
         self.outputs = []
 
     def call(self, inputs, sample_weights=None, training=None):
